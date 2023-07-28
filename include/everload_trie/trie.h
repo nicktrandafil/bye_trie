@@ -44,7 +44,6 @@ inline constexpr uint8_t stride_m_1 = 4; // bits
 // 0|0000000000000000|00000000|0000|00|0
 //                 16        8    4  2 1
 //                          15    7  3 1
-//                        0b10|0000|00|0
 class InternalBitMap {
 public:
     InternalBitMap() = default;

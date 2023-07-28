@@ -50,6 +50,11 @@ TEST_CASE("InternalBitMap") {
 }
 
 TEST_CASE("Trie") {
+    // 0|0000000000000000|00000000|0000|00|0
+    //                 16        8    4  2 1
+    //                          15    7  3 1
+
     everload_trie::Trie<int> trie;
-    trie.insert(0b0001, 4, 1);
+    REQUIRE(trie.insert(1, 4, 1) == nullptr);
+    REQUIRE(*trie.insert(1, 4, 1) == 1);
 }
