@@ -56,5 +56,8 @@ TEST_CASE("Trie") {
 
     everload_trie::Trie<int> trie;
     REQUIRE(trie.insert(1, 4, 1) == nullptr);
-    REQUIRE(*trie.insert(1, 4, 1) == 1);
+    REQUIRE(*trie.insert(1, 4, 2) == 1);
+
+    REQUIRE(trie.insert(0, 4, 2) == nullptr);
+    REQUIRE(*trie.insert(0, 4, 3) == 2);
 }

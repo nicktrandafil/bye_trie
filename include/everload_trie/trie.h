@@ -57,7 +57,7 @@ public:
         assert(len < stride);
         uint8_t shift = 0;
         switch (len) {
-        case 4:
+        [[likely]] case 4:
             if (auto const idx = (1u << (15 + (i >> shift))); inner & idx) {
                 return std::popcount(inner & (idx - 1));
             }
@@ -92,7 +92,7 @@ public:
         assert(i < 32);
         assert(len < stride);
         switch (len) {
-        case 4: {
+        [[likely]] case 4 : {
             auto const idx = (1u << (15 + i));
             values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
             return inner & idx;
@@ -126,7 +126,7 @@ public:
         assert(i < 32);
         assert(len < stride);
         switch (len) {
-        case 4:
+        [[likely]] case 4:
             inner |= (1u << (15 + i));
             break;
         case 3:
@@ -370,7 +370,7 @@ private:
             delete[] node->children;
             node->children = new_children;
 
-            if (n) {
+            if (n) [[likely]] {
                 std::rotate(std::reverse_iterator(node->children + n),
                             std::reverse_iterator(node->children + n) + 1,
                             std::reverse_iterator(node->children + idx));
@@ -402,34 +402,26 @@ private:
             return static_cast<T*>(node->children[child_idx].pointers[idx % 2]);
         }
 
-        if (idx % 2) {
-            auto const child_idx = branches_count + idx / 2;
-            node->children[child_idx].pointers[1] = new T{value};
-            node->internal_bitmap.set(value_idx, slice.len());
-            return nullptr;
-        }
-
         auto const values_count = node->internal_bitmap.total();
         auto const n = branches_count + values_count / 2;
 
-        auto const new_children = new detail::ErasedNode[n + 1];
-        new_children[n].pointers = detail::TwoPointers{};
-        std::copy_n(node->children, n, new_children);
-        delete[] node->children;
-        node->children = new_children;
-
-        if (n) {
-            auto const child_idx = branches_count + idx / 2;
-            std::rotate(std::reverse_iterator(reinterpret_cast<char*>(node->children)
-                                              + n * 16),
-                        std::reverse_iterator(reinterpret_cast<char*>(node->children)
-                                              + n * 16)
-                                + 1 * 8,
-                        std::reverse_iterator(reinterpret_cast<char*>(node->children)
-                                              + child_idx * 16));
+        if (values_count % 2 == 0) {
+            auto const new_children = new detail::ErasedNode[n + 1];
+            new_children[n].pointers = detail::TwoPointers{};
+            std::copy_n(node->children, n, new_children);
+            delete[] node->children;
+            node->children = new_children;
         }
 
         auto const child_idx = branches_count + idx / 2;
+
+        if (values_count) [[likely]] {
+            auto const bytes = reinterpret_cast<char*>(node->children);
+            std::rotate(std::reverse_iterator(bytes + (n + 1) * 16),
+                        std::reverse_iterator(bytes + (n + 1) * 16) + 1 * 8,
+                        std::reverse_iterator(bytes + child_idx * 16));
+        }
+
         node->children[child_idx].pointers[0] = new T{value};
         node->internal_bitmap.set(value_idx, slice.len());
 
