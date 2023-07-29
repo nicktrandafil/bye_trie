@@ -274,6 +274,24 @@ private:
     uint8_t len_;
 };
 
+class Vec {
+public:
+    Vec(ErasedNode* ptr, uint8_t branches, uint8_t values) noexcept
+            : ptr(ptr)
+            , branches(branches)
+            , values(values) {
+    }
+
+    Node* insert_barnch(uint8_t) {
+        assert(false);
+    }
+
+private:
+    ErasedNode* ptr;
+    uint8_t branches;
+    uint8_t values;
+};
+
 } // namespace detail
 
 template <typename T>
@@ -359,7 +377,7 @@ private:
         while (prefix.len() >= detail::stride) {
             auto const branches_count = node->external_bitmap.total();
             auto const values_count = node->internal_bitmap.total();
-            auto const n = branches_count + values_count;
+            auto const n = branches_count + values_count / 2;
 
             auto const new_children = new detail::ErasedNode[n + 1];
 
@@ -370,17 +388,13 @@ private:
             delete[] node->children;
             node->children = new_children;
 
-            if (n) [[likely]] {
-                std::rotate(std::reverse_iterator(node->children + n),
-                            std::reverse_iterator(node->children + n) + 1,
-                            std::reverse_iterator(node->children + idx));
+            {
+                auto const b = node->children;
+                auto const e = b + (n + 1) + 1;
+                std::rotate(b + idx, e - 1, e);
             }
 
-            new_children[idx].node = detail::Node{
-                    detail::InternalBitMap{0},
-                    detail::ExternalBitMap{0},
-                    nullptr,
-            };
+            new_children[idx].node = detail::Node{};
             node->external_bitmap.set(branch_idx);
 
             node = &node->children[idx].node;
@@ -394,18 +408,15 @@ private:
         auto const branches_count = node->external_bitmap.total();
 
         uint8_t idx;
-        auto const idx_has_value =
-                node->internal_bitmap.before(idx, value_idx, slice.len());
-
-        if (idx_has_value) {
+        if (node->internal_bitmap.before(idx, value_idx, slice.len())) {
             auto const child_idx = branches_count + idx / 2;
             return static_cast<T*>(node->children[child_idx].pointers[idx % 2]);
         }
 
         auto const values_count = node->internal_bitmap.total();
-        auto const n = branches_count + values_count / 2;
 
         if (values_count % 2 == 0) {
+            auto const n = branches_count + values_count / 2;
             auto const new_children = new detail::ErasedNode[n + 1];
             new_children[n].pointers = detail::TwoPointers{};
             std::copy_n(node->children, n, new_children);
@@ -413,16 +424,13 @@ private:
             node->children = new_children;
         }
 
-        auto const child_idx = branches_count + idx / 2;
-
-        if (values_count) [[likely]] {
-            auto const bytes = reinterpret_cast<char*>(node->children);
-            std::rotate(std::reverse_iterator(bytes + (n + 1) * 16),
-                        std::reverse_iterator(bytes + (n + 1) * 16) + 1 * 8,
-                        std::reverse_iterator(bytes + child_idx * 16));
+        {
+            auto const b = reinterpret_cast<char*>(node->children + branches_count);
+            auto const e = b + (values_count + 1) * 8;
+            std::rotate(b + idx * 8, e - 1 * 8, e);
         }
 
-        node->children[child_idx].pointers[0] = new T{value};
+        node->children[branches_count + idx / 2].pointers[idx % 2] = new T{value};
         node->internal_bitmap.set(value_idx, slice.len());
 
         size_ += 1;

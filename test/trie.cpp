@@ -49,15 +49,43 @@ TEST_CASE("InternalBitMap") {
     REQUIRE(bitmap.longest_before(0, 0).value() == 0);
 }
 
-TEST_CASE("Trie") {
+TEST_CASE("Trie::insert") {
     // 0|0000000000000000|00000000|0000|00|0
     //                 16        8    4  2 1
     //                          15    7  3 1
 
     everload_trie::Trie<int> trie;
-    REQUIRE(trie.insert(1, 4, 1) == nullptr);
-    REQUIRE(*trie.insert(1, 4, 2) == 1);
 
-    REQUIRE(trie.insert(0, 4, 2) == nullptr);
-    REQUIRE(*trie.insert(0, 4, 3) == 2);
+    SECTION("insert first value") {
+        REQUIRE(trie.insert(1, 4, 1) == nullptr);
+        SECTION("value already exists") {
+            REQUIRE(*trie.insert(1, 4, 100) == 1);
+        }
+
+        SECTION("insert a value before the first value") {
+            REQUIRE(trie.insert(0, 4, 2) == nullptr);
+            SECTION("value already exists") {
+                REQUIRE(*trie.insert(0, 4, 100) == 2);
+            }
+        }
+
+        SECTION("insert a value after the first value") {
+            REQUIRE(trie.insert(2, 4, 2) == nullptr);
+            SECTION("value already exists") {
+                REQUIRE(*trie.insert(2, 4, 100) == 2);
+            }
+        }
+
+        SECTION("insert a value between values") {
+            REQUIRE(trie.insert(4, 4, 2) == nullptr);
+            REQUIRE(trie.insert(3, 4, 3) == nullptr);
+            SECTION("values already exist") {
+                REQUIRE(*trie.insert(4, 4, 100) == 2);
+                REQUIRE(*trie.insert(3, 4, 100) == 3);
+            }
+        }
+    }
+
+    SECTION("insert first branch") {
+    }
 }
