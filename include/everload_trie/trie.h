@@ -312,6 +312,26 @@ public:
                 node, prefix.sub(0, std::min(detail::stride_m_1, prefix.len())), value);
     }
 
+    T* match(uint32_t bits, uint8_t len) & noexcept {
+        detail::Node* node = &root_;
+        detail::BitsSlice<uint32_t> prefix{bits, 0, len};
+
+        go_to_leaf(node, prefix);
+        if (prefix.len() > detail::stride) {
+            return nullptr;
+        }
+
+        auto const value_idx = static_cast<uint8_t>(prefix);
+        uint8_t idx;
+        if (node->internal_bitmap.before(idx, value_idx, prefix.len())) {
+            auto const branches_count = node->external_bitmap.total();
+            auto const child_idx = branches_count + idx / 2;
+            return static_cast<T*>(node->children[child_idx].pointers[idx % 2]);
+        } else {
+            return nullptr;
+        }
+    }
+
     ~Trie() {
         std::vector<detail::Node> stack{{root_}};
         while (stack.size()) { // dfs traversal
