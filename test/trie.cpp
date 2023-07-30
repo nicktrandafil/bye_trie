@@ -87,5 +87,32 @@ TEST_CASE("Trie::insert") {
     }
 
     SECTION("insert first branch") {
+        REQUIRE(trie.insert(0b0000'00001, 6, 1) == nullptr);
+        SECTION("value already exists") {
+            REQUIRE(*trie.insert(0b0000'00001, 6, 100) == 1);
+        }
+
+        SECTION("insert a branch before the first branch") {
+            REQUIRE(trie.insert(0b0000'0000, 6, 2) == nullptr);
+            SECTION("value already exists") {
+                REQUIRE(*trie.insert(0b0000'0000, 6, 100) == 2);
+            }
+        }
+
+        SECTION("insert a branch after the first branch") {
+            REQUIRE(trie.insert(0b0000'00010, 6, 2) == nullptr);
+            SECTION("value already exists") {
+                REQUIRE(*trie.insert(0b0000'00010, 6, 100) == 2);
+            }
+        }
+
+        SECTION("insert a branch between branches") {
+            REQUIRE(trie.insert(0b0000'00100, 6, 2) == nullptr);
+            REQUIRE(trie.insert(0b0000'00011, 6, 3) == nullptr);
+            SECTION("values already exist") {
+                REQUIRE(*trie.insert(0b0000'00100, 6, 100) == 2);
+                REQUIRE(*trie.insert(0b0000'00011, 6, 100) == 3);
+            }
+        }
     }
 }

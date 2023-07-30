@@ -274,24 +274,6 @@ private:
     uint8_t len_;
 };
 
-class Vec {
-public:
-    Vec(ErasedNode* ptr, uint8_t branches, uint8_t values) noexcept
-            : ptr(ptr)
-            , branches(branches)
-            , values(values) {
-    }
-
-    Node* insert_barnch(uint8_t) {
-        assert(false);
-    }
-
-private:
-    ErasedNode* ptr;
-    uint8_t branches;
-    uint8_t values;
-};
-
 } // namespace detail
 
 template <typename T>
@@ -332,30 +314,27 @@ public:
 
     ~Trie() {
         std::vector<detail::Node> stack{{root_}};
+        while (stack.size()) { // dfs traversal
+            auto const node = stack.back();
+            stack.pop_back();
 
-        while (stack.size()) {
-            // go down
-            while (auto const n = stack.back().external_bitmap.total()) {
-                auto const i = stack.size();
-                stack.resize(i + n);
-                std::transform(stack.back().children,
-                               stack.back().children + n,
-                               stack.begin() + i,
-                               [](auto x) { return x.node; });
-            }
+            auto const branches_count = node.external_bitmap.total();
+            auto const m = stack.size();
+            stack.resize(m + branches_count);
+            std::transform(node.children,
+                           node.children + branches_count,
+                           stack.begin() + m,
+                           [](auto x) { return x.node; });
 
-            // go up
-            auto const branches_count = stack.back().external_bitmap.total();
-            auto const values_count = stack.back().internal_bitmap.total();
-            std::for_each(stack.back().children + branches_count,
-                          stack.back().children + branches_count + values_count / 2
+            auto const values_count = node.internal_bitmap.total();
+            std::for_each(node.children + branches_count,
+                          node.children + branches_count + values_count / 2
                                   + values_count % 2,
                           [](auto x) {
                               delete static_cast<T*>(x.pointers[0]);
                               delete static_cast<T*>(x.pointers[1]);
                           });
-            delete[] stack.back().children;
-            stack.pop_back();
+            delete[] node.children;
         }
     }
 
@@ -379,22 +358,23 @@ private:
             auto const values_count = node->internal_bitmap.total();
             auto const n = branches_count + values_count / 2;
 
-            auto const new_children = new detail::ErasedNode[n + 1];
-
             auto const branch_idx = static_cast<uint8_t>(prefix.sub(0, detail::stride));
             auto const idx = node->external_bitmap.before(branch_idx);
 
-            std::copy_n(node->children, n, new_children);
-            delete[] node->children;
-            node->children = new_children;
+            {
+                auto const new_children = new detail::ErasedNode[n + 1];
+                std::copy_n(node->children, n, new_children);
+                delete[] node->children;
+                node->children = new_children;
+            }
 
             {
                 auto const b = node->children;
-                auto const e = b + (n + 1) + 1;
+                auto const e = b + n + 1;
                 std::rotate(b + idx, e - 1, e);
             }
 
-            new_children[idx].node = detail::Node{};
+            node->children[idx].node = detail::Node{};
             node->external_bitmap.set(branch_idx);
 
             node = &node->children[idx].node;
