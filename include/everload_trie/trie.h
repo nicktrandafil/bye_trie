@@ -33,6 +33,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <vector>
 
 namespace everload_trie {
@@ -118,8 +119,8 @@ public:
         }
     }
 
-    size_t total() const noexcept {
-        return static_cast<size_t>(std::popcount(inner));
+    uint8_t total() const noexcept {
+        return static_cast<uint8_t>(std::popcount(inner));
     }
 
     void set(uint8_t i, uint8_t len) {
@@ -166,8 +167,8 @@ public:
         return static_cast<uint8_t>(std::popcount(((1u << i) - 1) & inner));
     }
 
-    size_t total() const noexcept {
-        return static_cast<size_t>(std::popcount(inner));
+    uint8_t total() const noexcept {
+        return static_cast<uint8_t>(std::popcount(inner));
     }
 
     void set(uint8_t i) {
@@ -274,6 +275,82 @@ private:
     uint8_t len_;
 };
 
+class NodeVec {
+public:
+    NodeVec(ErasedNode* ptr, uint8_t branches_count, uint8_t values_count) noexcept
+            : branches_count{branches_count}
+            , values_count{values_count}
+            , total_count{static_cast<uint8_t>(branches_count + values_count / 2
+                                               + values_count % 2)}
+            , inner{std::span{ptr, total_count}} {
+    }
+
+    NodeVec(NodeVec const&) = delete;
+    NodeVec& operator=(NodeVec const&) = delete;
+
+    /// \throw std::bad_alloc
+    ErasedNode* with_new_branch(uint8_t i, Node branch) noexcept(false) {
+        assert(i <= branches_count);
+        auto const new_size = (total_count + 1) * sizeof(ErasedNode);
+        auto const ptr = std::realloc(inner.data(), new_size);
+        if (ptr == nullptr) {
+            throw std::bad_alloc{};
+        }
+
+        branches_count += 1;
+        total_count += 1;
+        inner = std::span{static_cast<ErasedNode*>(ptr), total_count};
+
+        std::rotate(inner.begin() + i, inner.begin() + total_count - 1, inner.end());
+
+        inner[i].node = branch;
+
+        return inner.data();
+    }
+
+    /// \throw std::bad_alloc
+    ErasedNode* with_new_value(uint8_t i, void* value) noexcept(false) {
+        assert(i <= values_count);
+
+        if (values_count % 2 == 0) {
+            auto const new_size = (total_count + 1) * sizeof(ErasedNode);
+            auto const ptr = std::realloc(inner.data(), new_size);
+            if (ptr == nullptr) {
+                throw std::bad_alloc{};
+            }
+
+            total_count += 1;
+            inner = std::span{static_cast<ErasedNode*>(ptr), total_count};
+            inner[total_count - 1].pointers = {};
+        }
+
+        values_count += 1;
+
+        auto const values = inner.subspan(branches_count);
+        auto const bytes = as_writable_bytes(values);
+
+        constexpr auto value_size = sizeof(void*);
+        std::rotate(bytes.begin() + i * value_size,
+                    bytes.end() - 1 * value_size,
+                    bytes.end());
+
+        values[i / 2].pointers[i % 2] = value;
+
+        return inner.data();
+    }
+
+    void* value(uint8_t i) const noexcept {
+        assert(i < values_count);
+        return inner[branches_count + i / 2].pointers[i % 2];
+    }
+
+private:
+    uint8_t branches_count;
+    uint8_t values_count;
+    uint8_t total_count;
+    std::span<ErasedNode> inner;
+};
+
 } // namespace detail
 
 template <typename T>
@@ -354,7 +431,8 @@ public:
                               delete static_cast<T*>(x.pointers[0]);
                               delete static_cast<T*>(x.pointers[1]);
                           });
-            delete[] node.children;
+
+            std::free(node.children);
         }
     }
 
@@ -374,63 +452,34 @@ private:
 
     static void extend_leaf(detail::Node*& node, detail::BitsSlice<uint32_t>& prefix) {
         while (prefix.len() >= detail::stride) {
-            auto const branches_count = node->external_bitmap.total();
-            auto const values_count = node->internal_bitmap.total();
-            auto const n = branches_count + values_count / 2;
-
             auto const branch_idx = static_cast<uint8_t>(prefix.sub(0, detail::stride));
-            auto const idx = node->external_bitmap.before(branch_idx);
+            auto const vec_idx = node->external_bitmap.before(branch_idx);
 
-            {
-                auto const new_children = new detail::ErasedNode[n + 1];
-                std::copy_n(node->children, n, new_children);
-                delete[] node->children;
-                node->children = new_children;
-            }
-
-            {
-                auto const b = node->children;
-                auto const e = b + n + 1;
-                std::rotate(b + idx, e - 1, e);
-            }
-
-            node->children[idx].node = detail::Node{};
+            node->children = detail::NodeVec{node->children,
+                                             node->external_bitmap.total(),
+                                             node->internal_bitmap.total()}
+                                     .with_new_branch(vec_idx, detail::Node{});
             node->external_bitmap.set(branch_idx);
 
-            node = &node->children[idx].node;
+            node = &node->children[vec_idx].node;
             prefix = prefix.sub(detail::stride);
         }
     }
 
     T* add_value(detail::Node*& node, detail::BitsSlice<uint32_t> slice, T value) {
+        detail::NodeVec vec{
+                node->children,
+                node->external_bitmap.total(),
+                node->internal_bitmap.total(),
+        };
+
         auto const value_idx = static_cast<uint8_t>(slice);
-
-        auto const branches_count = node->external_bitmap.total();
-
-        uint8_t idx;
-        if (node->internal_bitmap.before(idx, value_idx, slice.len())) {
-            auto const child_idx = branches_count + idx / 2;
-            return static_cast<T*>(node->children[child_idx].pointers[idx % 2]);
+        uint8_t vec_idx;
+        if (node->internal_bitmap.before(vec_idx, value_idx, slice.len())) {
+            return static_cast<T*>(vec.value(vec_idx));
         }
 
-        auto const values_count = node->internal_bitmap.total();
-
-        if (values_count % 2 == 0) {
-            auto const n = branches_count + values_count / 2;
-            auto const new_children = new detail::ErasedNode[n + 1];
-            new_children[n].pointers = detail::TwoPointers{};
-            std::copy_n(node->children, n, new_children);
-            delete[] node->children;
-            node->children = new_children;
-        }
-
-        {
-            auto const b = reinterpret_cast<char*>(node->children + branches_count);
-            auto const e = b + (values_count + 1) * 8;
-            std::rotate(b + idx * 8, e - 1 * 8, e);
-        }
-
-        node->children[branches_count + idx / 2].pointers[idx % 2] = new T{value};
+        node->children = std::move(vec).with_new_value(vec_idx, new T{value});
         node->internal_bitmap.set(value_idx, slice.len());
 
         size_ += 1;
