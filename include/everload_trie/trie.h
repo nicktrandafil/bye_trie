@@ -224,16 +224,16 @@ constexpr inline uint8_t take_slice(uint64_t value, uint8_t start, uint8_t len) 
 inline constexpr size_t max_prefix_len = 16; // bytes
 
 template <class T>
-concept UnsignedIntegral = std::unsigned_integral<T>
-                        || (std::is_trivial_v<T> && sizeof(T) <= max_prefix_len
-                            && requires(T val) {
-                                   { val << 1 };
-                                   { val >> 1 };
-                                   { val& val };
-                                   { val - val };
-                                   { val == val };
-                                   { static_cast<uint64_t>(val) };
-                               });
+concept UnsignedIntegral =
+        std::unsigned_integral<T>
+        || (std::is_trivial_v<T> && sizeof(T) <= max_prefix_len && requires(T val) {
+               { val << 1 };
+               { val >> 1 };
+               { val& val };
+               { val - val };
+               { val == val };
+               { static_cast<uint64_t>(val) };
+           });
 
 template <UnsignedIntegral T>
 class BitsSlice {
@@ -289,7 +289,7 @@ public:
     NodeVec& operator=(NodeVec const&) = delete;
 
     /// \throw std::bad_alloc
-    ErasedNode* with_new_branch(uint8_t i, Node branch) noexcept(false) {
+    ErasedNode* insert_branch(uint8_t i, Node branch) noexcept(false) {
         assert(i <= branches_count);
         auto const new_size = (total_count + 1) * sizeof(ErasedNode);
         auto const ptr = std::realloc(inner.data(), new_size);
@@ -309,7 +309,7 @@ public:
     }
 
     /// \throw std::bad_alloc
-    ErasedNode* with_new_value(uint8_t i, void* value) noexcept(false) {
+    ErasedNode* insert_value(uint8_t i, void* value) noexcept(false) {
         assert(i <= values_count);
 
         if (values_count % 2 == 0) {
@@ -342,6 +342,18 @@ public:
     void* value(uint8_t i) const noexcept {
         assert(i < values_count);
         return inner[branches_count + i / 2].pointers[i % 2];
+    }
+
+    std::span<ErasedNode> branches() const noexcept {
+        return inner.subspan(0, branches_count);
+    }
+
+    std::span<ErasedNode> values() const noexcept {
+        return inner.subspan(branches_count);
+    }
+
+    ErasedNode* data() noexcept {
+        return inner.data();
     }
 
 private:
@@ -380,6 +392,7 @@ public:
 
     /// \return Pointer to the value if it exists, nullptr otherwise
     /// \throw std::bad_alloc
+    /// \post On exception leaks 16 bytes and the prior state is preserved
     T* insert(uint32_t bits, uint8_t len, T value) & noexcept(false) {
         detail::Node* node = &root_;
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
@@ -409,6 +422,7 @@ public:
         }
     }
 
+    /// \throw std::bad_alloc
     ~Trie() {
         std::vector<detail::Node> stack{{root_}};
         while (stack.size()) { // dfs traversal
@@ -437,7 +451,8 @@ public:
     }
 
 private:
-    static void go_to_leaf(detail::Node*& node, detail::BitsSlice<uint32_t>& prefix) {
+    static void go_to_leaf(detail::Node*& node,
+                           detail::BitsSlice<uint32_t>& prefix) noexcept {
         while (prefix.len() >= detail::stride) {
             auto const branch_idx = static_cast<uint8_t>(prefix.sub(0, detail::stride));
             if (node->external_bitmap.exists(branch_idx)) {
@@ -450,6 +465,7 @@ private:
         }
     }
 
+    /// \throw std::bad_alloc
     static void extend_leaf(detail::Node*& node, detail::BitsSlice<uint32_t>& prefix) {
         while (prefix.len() >= detail::stride) {
             auto const branch_idx = static_cast<uint8_t>(prefix.sub(0, detail::stride));
@@ -458,7 +474,7 @@ private:
             node->children = detail::NodeVec{node->children,
                                              node->external_bitmap.total(),
                                              node->internal_bitmap.total()}
-                                     .with_new_branch(vec_idx, detail::Node{});
+                                     .insert_branch(vec_idx, detail::Node{});
             node->external_bitmap.set(branch_idx);
 
             node = &node->children[vec_idx].node;
@@ -466,6 +482,8 @@ private:
         }
     }
 
+    /// \throw std::bad_alloc
+    /// \post On exception leaks 16 bytes and the prior state is preserved
     T* add_value(detail::Node*& node, detail::BitsSlice<uint32_t> slice, T value) {
         detail::NodeVec vec{
                 node->children,
@@ -479,7 +497,7 @@ private:
             return static_cast<T*>(vec.value(vec_idx));
         }
 
-        node->children = std::move(vec).with_new_value(vec_idx, new T{value});
+        node->children = std::move(vec).insert_value(vec_idx, new T{value});
         node->internal_bitmap.set(value_idx, slice.len());
 
         size_ += 1;

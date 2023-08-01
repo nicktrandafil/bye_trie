@@ -49,6 +49,69 @@ TEST_CASE("", "[InternalBitMap][longest_before]") {
     REQUIRE(bitmap.longest_before(0, 0).value() == 0);
 }
 
+class MallocResource {
+public:
+    MallocResource(detail::NodeVec* vec)
+            : vec(vec) {
+    }
+
+    ~MallocResource() noexcept {
+        std::free(vec->data());
+    }
+
+private:
+    detail::NodeVec* vec;
+};
+
+TEST_CASE("Branch manipulation", "[NodeVec][with_new_branch]") {
+    detail::NodeVec vec{nullptr, 0, 0};
+    MallocResource guard{&vec};
+    std::array<detail::ErasedNode, 3> fake;
+    SECTION("insert the first branch") {
+        vec.insert_branch(0,
+                          detail::Node{.internal_bitmap = {},
+                                       .external_bitmap = {},
+                                       .children = &fake[0]});
+        REQUIRE(vec.branches().size() == 1);
+        REQUIRE(vec.branches()[0].node.children == &fake[0]);
+
+        SECTION("insert a branch before") {
+            vec.insert_branch(0,
+                              detail::Node{.internal_bitmap = {},
+                                           .external_bitmap = {},
+                                           .children = &fake[1]});
+            REQUIRE(vec.branches().size() == 2);
+            REQUIRE(vec.branches()[0].node.children == &fake[1]);
+            REQUIRE(vec.branches()[1].node.children == &fake[0]);
+        }
+
+        SECTION("insert a branch after") {
+            vec.insert_branch(1,
+                              detail::Node{.internal_bitmap = {},
+                                           .external_bitmap = {},
+                                           .children = &fake[1]});
+            REQUIRE(vec.branches().size() == 2);
+            REQUIRE(vec.branches()[0].node.children == &fake[0]);
+            REQUIRE(vec.branches()[1].node.children == &fake[1]);
+        }
+
+        SECTION("insert a branch between") {
+            vec.insert_branch(1,
+                              detail::Node{.internal_bitmap = {},
+                                           .external_bitmap = {},
+                                           .children = &fake[1]});
+            vec.insert_branch(1,
+                              detail::Node{.internal_bitmap = {},
+                                           .external_bitmap = {},
+                                           .children = &fake[2]});
+            REQUIRE(vec.branches().size() == 3);
+            REQUIRE(vec.branches()[0].node.children == &fake[0]);
+            REQUIRE(vec.branches()[1].node.children == &fake[2]);
+            REQUIRE(vec.branches()[2].node.children == &fake[1]);
+        }
+    }
+}
+
 TEST_CASE("Values' array manipulation", "[Trie][insert]") {
     everload_trie::Trie<int> trie;
     SECTION("insert the first value") {
