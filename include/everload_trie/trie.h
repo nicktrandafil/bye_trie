@@ -407,7 +407,7 @@ public:
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
 
         go_to_leaf(node, prefix);
-        if (prefix.len() > detail::stride) {
+        if (prefix.len() > detail::stride_m_1) {
             return nullptr;
         }
 

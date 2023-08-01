@@ -177,3 +177,30 @@ TEST_CASE("Branches' array manipulation", "[Trie][insert]") {
         }
     }
 }
+
+TEST_CASE("", "[Trie][match]") {
+    everload_trie::Trie<int> trie;
+
+    SECTION("basic") {
+        trie.insert(0, 4, 0);
+        trie.insert(1, 4, 1);
+        trie.insert(2, 4, 2);
+
+        trie.insert(0b0000'00001, 6, 3);
+        trie.insert(0b0000'00010, 6, 4);
+        trie.insert(0b0000'00100, 6, 5);
+
+        REQUIRE(*trie.match(0, 4) == 0);
+        REQUIRE(*trie.match(1, 4) == 1);
+        REQUIRE(*trie.match(2, 4) == 2);
+        REQUIRE(*trie.match(0b0000'00001, 6) == 3);
+        REQUIRE(*trie.match(0b0000'00010, 6) == 4);
+        REQUIRE(*trie.match(0b0000'00100, 6) == 5);
+    }
+
+    SECTION("negative basic") {
+        trie.insert(0, 4, 0);
+        REQUIRE(trie.match(0, 5) == nullptr);
+        REQUIRE(trie.match(1, 4) == nullptr);
+    }
+}
