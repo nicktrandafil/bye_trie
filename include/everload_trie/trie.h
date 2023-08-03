@@ -396,17 +396,16 @@ public:
     T* insert(uint32_t bits, uint8_t len, T value) & noexcept(false) {
         detail::Node* node = &root_;
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
-        go_to_leaf(node, prefix);
+        find_leaf(node, prefix);
         extend_leaf(node, prefix);
-        return add_value(
-                node, prefix.sub(0, std::min(detail::stride_m_1, prefix.len())), value);
+        return add_value(node, prefix, value);
     }
 
     T* match(uint32_t bits, uint8_t len) & noexcept {
         detail::Node* node = &root_;
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
 
-        go_to_leaf(node, prefix);
+        find_leaf(node, prefix);
         if (prefix.len() > detail::stride_m_1) {
             return nullptr;
         }
@@ -451,8 +450,8 @@ public:
     }
 
 private:
-    static void go_to_leaf(detail::Node*& node,
-                           detail::BitsSlice<uint32_t>& prefix) noexcept {
+    static void find_leaf(detail::Node*& node,
+                          detail::BitsSlice<uint32_t>& prefix) noexcept {
         while (prefix.len() >= detail::stride) {
             auto const branch_idx = static_cast<uint8_t>(prefix.sub(0, detail::stride));
             if (node->external_bitmap.exists(branch_idx)) {
