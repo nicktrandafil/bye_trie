@@ -53,43 +53,50 @@ public:
             : inner{inner} {
     }
 
-    std::optional<uint8_t> longest_before(uint8_t i, uint8_t len) const noexcept {
+    std::optional<uint8_t> find_longest(uint8_t& values_before,
+                                        uint8_t i,
+                                        uint8_t len) const noexcept {
         assert(i < 32);
         assert(len < stride);
         uint8_t shift = 0;
         switch (len) {
         [[likely]] case 4:
-            if (auto const idx = (1u << (15 + (i >> shift))); inner & idx) {
-                return std::popcount(inner & (idx - 1));
+            if (auto const idx = (1u << (15 + i)); inner & idx) {
+                values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
+                return 4;
             }
             shift += 1;
             [[fallthrough]];
         case 3:
             if (auto const idx = (1u << (7 + (i >> shift))); inner & idx) {
-                return std::popcount(inner & (idx - 1));
+                values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
+                return 3;
             }
             shift += 1;
             [[fallthrough]];
         case 2:
             if (auto const idx = (1u << (3 + (i >> shift))); inner & idx) {
-                return std::popcount(inner & (idx - 1));
+                values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
+                return 2;
             }
             shift += 1;
             [[fallthrough]];
         case 1:
             if (auto const idx = (1u << (1 + (i >> shift))); inner & idx) {
-                return std::popcount(inner & (idx - 1));
+                values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
+                return 1;
             }
             [[fallthrough]];
         case 0:
             if (inner & 1) {
+                values_before = 0;
                 return 0;
             }
         }
         return std::nullopt;
     }
 
-    bool before(uint8_t& values_before, uint8_t i, uint8_t len) const noexcept {
+    bool exists(uint8_t& values_before, uint8_t i, uint8_t len) const noexcept {
         assert(i < 32);
         assert(len < stride);
         switch (len) {
@@ -244,11 +251,15 @@ public:
             , len_(len) {
     }
 
+    uint8_t offset() const noexcept {
+        return start_;
+    }
+
     uint8_t len() const noexcept {
         return len_;
     }
 
-    explicit operator uint8_t() const noexcept {
+    uint8_t value() const noexcept {
         return take_slice(bits_, start_, len_);
     }
 
@@ -396,29 +407,51 @@ public:
     T* insert(uint32_t bits, uint8_t len, T value) & noexcept(false) {
         detail::Node* node = &root_;
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
-        find_leaf(node, prefix);
+        find_leaf(node, prefix, noop);
         extend_leaf(node, prefix);
         return add_value(node, prefix, value);
     }
 
-    T* match(uint32_t bits, uint8_t len) & noexcept {
+    T* match_exact(uint32_t bits, uint8_t len) & noexcept {
         detail::Node* node = &root_;
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
 
-        find_leaf(node, prefix);
+        find_leaf(node, prefix, noop);
         if (prefix.len() > detail::stride_m_1) {
             return nullptr;
         }
 
-        auto const value_idx = static_cast<uint8_t>(prefix);
+        auto const value_idx = prefix.value();
         uint8_t idx;
-        if (node->internal_bitmap.before(idx, value_idx, prefix.len())) {
+        if (node->internal_bitmap.exists(idx, value_idx, prefix.len())) {
             auto const branches_count = node->external_bitmap.total();
             auto const child_idx = branches_count + idx / 2;
             return static_cast<T*>(node->children[child_idx].pointers[idx % 2]);
         } else {
             return nullptr;
         }
+    }
+
+    std::optional<std::pair<uint8_t, T*>> match_longest(uint32_t bits,
+                                                        uint8_t len) & noexcept {
+        detail::Node* node = &root_;
+        detail::BitsSlice<uint32_t> prefix{bits, 0, len};
+        std::optional<std::pair<uint8_t, T*>> longest;
+        find_leaf(node, prefix, [&longest](auto node, auto prefix) {
+            auto const slice = prefix.sub(0, std::min(detail::stride_m_1, prefix.len()));
+            auto const value_idx = slice.value();
+            uint8_t idx;
+            if (auto const len =
+                        node.internal_bitmap.find_longest(idx, value_idx, slice.len())) {
+                auto const branches_count = node.external_bitmap.total();
+                auto const child_idx = branches_count + idx / 2;
+                longest = std::pair{
+                        static_cast<uint8_t>(slice.offset() + slice.len()),
+                        static_cast<T*>(node.children[child_idx].pointers[idx % 2]),
+                };
+            }
+        });
+        return longest;
     }
 
     /// \throw std::bad_alloc
@@ -450,10 +483,14 @@ public:
     }
 
 private:
+    static constexpr auto noop = [](auto...) {};
+
     static void find_leaf(detail::Node*& node,
-                          detail::BitsSlice<uint32_t>& prefix) noexcept {
+                          detail::BitsSlice<uint32_t>& prefix,
+                          auto on_node) noexcept {
         while (prefix.len() >= detail::stride) {
-            auto const branch_idx = static_cast<uint8_t>(prefix.sub(0, detail::stride));
+            on_node(*node, prefix);
+            auto const branch_idx = prefix.sub(0, detail::stride).value();
             if (node->external_bitmap.exists(branch_idx)) {
                 auto const idx = node->external_bitmap.before(branch_idx);
                 node = &node->children[idx].node;
@@ -462,12 +499,13 @@ private:
             }
             prefix = prefix.sub(detail::stride);
         }
+        on_node(*node, prefix);
     }
 
     /// \throw std::bad_alloc
     static void extend_leaf(detail::Node*& node, detail::BitsSlice<uint32_t>& prefix) {
         while (prefix.len() >= detail::stride) {
-            auto const branch_idx = static_cast<uint8_t>(prefix.sub(0, detail::stride));
+            auto const branch_idx = prefix.sub(0, detail::stride).value();
             auto const vec_idx = node->external_bitmap.before(branch_idx);
 
             node->children = detail::NodeVec{node->children,
@@ -490,9 +528,9 @@ private:
                 node->internal_bitmap.total(),
         };
 
-        auto const value_idx = static_cast<uint8_t>(slice);
+        auto const value_idx = slice.value();
         uint8_t vec_idx;
-        if (node->internal_bitmap.before(vec_idx, value_idx, slice.len())) {
+        if (node->internal_bitmap.exists(vec_idx, value_idx, slice.len())) {
             return static_cast<T*>(vec.value(vec_idx));
         }
 

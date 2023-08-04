@@ -41,12 +41,64 @@ TEST_CASE("", "[ExternalBitMap][exists][before]") {
 
 TEST_CASE("", "[InternalBitMap][longest_before]") {
     detail::InternalBitMap bitmap(0b0'1000000000001010'10000010'1010'10'1);
-    REQUIRE(bitmap.longest_before(15, 4).value() == 8);
-    REQUIRE(bitmap.longest_before(3, 4).value() == 7);
-    REQUIRE(bitmap.longest_before(7, 3).value() == 5);
-    REQUIRE(bitmap.longest_before(3, 2).value() == 3);
-    REQUIRE(bitmap.longest_before(1, 1).value() == 1);
-    REQUIRE(bitmap.longest_before(0, 0).value() == 0);
+    uint8_t idx;
+
+    SECTION("4") {
+        SECTION("match") {
+            REQUIRE(bitmap.find_longest(idx, 0b1111, 4).value() == 4);
+            REQUIRE(idx == 8);
+            REQUIRE(bitmap.find_longest(idx, 0b11, 4).value() == 4);
+            REQUIRE(idx == 7);
+        }
+        SECTION("longest") {
+            REQUIRE(bitmap.find_longest(idx, 0b1110, 4).value() == 3);
+            REQUIRE(idx == 5);
+        }
+    }
+
+    SECTION("3") {
+        SECTION("match") {
+            REQUIRE(bitmap.find_longest(idx, 0b111, 3).value() == 3);
+            REQUIRE(idx == 5);
+        }
+        SECTION("longest") {
+            REQUIRE(bitmap.find_longest(idx, 0b110, 3).value() == 2);
+            REQUIRE(idx == 3);
+        }
+    }
+
+    SECTION("2") {
+        SECTION("match") {
+            REQUIRE(bitmap.find_longest(idx, 0b11, 2).value() == 2);
+            REQUIRE(idx == 3);
+        }
+        SECTION("longest") {
+            REQUIRE(bitmap.find_longest(idx, 0b10, 2).value() == 1);
+            REQUIRE(idx == 1);
+        }
+    }
+
+    SECTION("1") {
+        SECTION("match") {
+            REQUIRE(bitmap.find_longest(idx, 0b1, 1).value() == 1);
+            REQUIRE(idx == 1);
+        }
+        SECTION("longest") {
+            REQUIRE(bitmap.find_longest(idx, 0b0, 1).value() == 0);
+            REQUIRE(idx == 0);
+        }
+    }
+
+    SECTION("0") {
+        SECTION("match") {
+            REQUIRE(bitmap.find_longest(idx, 0b0, 0).value() == 0);
+            REQUIRE(idx == 0);
+        }
+        SECTION("longest") {
+            REQUIRE(bitmap.find_longest(idx, 0b1, 0).value() == 0);
+            REQUIRE(idx == 0);
+        }
+    }
 }
 
 class MallocResource {
@@ -181,7 +233,7 @@ TEST_CASE("Branches' array manipulation", "[Trie][insert]") {
 TEST_CASE("", "[Trie][match]") {
     everload_trie::Trie<int> trie;
 
-    SECTION("basic") {
+    SECTION("positive") {
         trie.insert(0, 4, 0);
         trie.insert(1, 4, 1);
         trie.insert(2, 4, 2);
@@ -190,17 +242,60 @@ TEST_CASE("", "[Trie][match]") {
         trie.insert(0b0000'00010, 6, 4);
         trie.insert(0b0000'00100, 6, 5);
 
-        REQUIRE(*trie.match(0, 4) == 0);
-        REQUIRE(*trie.match(1, 4) == 1);
-        REQUIRE(*trie.match(2, 4) == 2);
-        REQUIRE(*trie.match(0b0000'00001, 6) == 3);
-        REQUIRE(*trie.match(0b0000'00010, 6) == 4);
-        REQUIRE(*trie.match(0b0000'00100, 6) == 5);
+        SECTION("level 0") {
+            REQUIRE(*trie.match_exact(0, 4) == 0);
+            REQUIRE(*trie.match_exact(1, 4) == 1);
+            REQUIRE(*trie.match_exact(2, 4) == 2);
+        }
+
+        SECTION("level 1") {
+            REQUIRE(*trie.match_exact(0b0000'00001, 6) == 3);
+            REQUIRE(*trie.match_exact(0b0000'00010, 6) == 4);
+            REQUIRE(*trie.match_exact(0b0000'00100, 6) == 5);
+        }
     }
 
     SECTION("negative basic") {
         trie.insert(0, 4, 0);
-        REQUIRE(trie.match(0, 5) == nullptr);
-        REQUIRE(trie.match(1, 4) == nullptr);
+        REQUIRE(trie.match_exact(0, 5) == nullptr);
+        REQUIRE(trie.match_exact(1, 4) == nullptr);
     }
+}
+
+TEST_CASE("", "[Trie][match_longest]") {
+    everload_trie::Trie<int> trie;
+
+    SECTION("positive") {
+        trie.insert(0b0000, 4, 0);
+        trie.insert(0b001, 3, 1);
+        trie.insert(0b0000'00001, 6, 2);
+
+        SECTION("exact") {
+            auto const [len, value] = *trie.match_longest(0b0000, 4);
+            REQUIRE(len == 4);
+            REQUIRE(*value == 0);
+        }
+
+        SECTION("longest is one bit short") {
+            auto const [len, value] = *trie.match_longest(0b00000, 5);
+            REQUIRE(len == 4);
+            REQUIRE(*value == 0);
+        }
+
+        SECTION("longest is 3 bits short, one level shallower") {
+            auto const [len, value] = *trie.match_longest(0b00'10001, 7);
+            REQUIRE(len == 3);
+            REQUIRE(*value == 1);
+        }
+
+        // std::tie(len, value) = *trie.match_longest(0b0'00001, 6);
+        // REQUIRE(len == 6);
+        // REQUIRE(*value == 3);
+    }
+
+    // SECTION("negative basic") {
+    //     trie.insert(0, 4, 0);
+    //     REQUIRE(trie.match(0, 5) == nullptr);
+    //     REQUIRE(trie.match(1, 4) == nullptr);
+    // }
 }
