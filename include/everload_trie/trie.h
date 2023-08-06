@@ -58,31 +58,27 @@ public:
                                         uint8_t len) const noexcept {
         assert(i < 32);
         assert(len < stride);
-        uint8_t shift = 0;
         switch (len) {
         [[likely]] case 4:
-            if (auto const idx = (1u << (15 + i)); inner & idx) {
+            if (auto const idx = (1u << (15 + (i & 0b1111))); inner & idx) {
                 values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
                 return 4;
             }
-            shift += 1;
             [[fallthrough]];
         case 3:
-            if (auto const idx = (1u << (7 + (i >> shift))); inner & idx) {
+            if (auto const idx = (1u << (7 + (i & 0b111))); inner & idx) {
                 values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
                 return 3;
             }
-            shift += 1;
             [[fallthrough]];
         case 2:
-            if (auto const idx = (1u << (3 + (i >> shift))); inner & idx) {
+            if (auto const idx = (1u << (3 + (i & 0b11))); inner & idx) {
                 values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
                 return 2;
             }
-            shift += 1;
             [[fallthrough]];
         case 1:
-            if (auto const idx = (1u << (1 + (i >> shift))); inner & idx) {
+            if (auto const idx = (1u << (1 + (i & 0b1))); inner & idx) {
                 values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
                 return 1;
             }
@@ -446,7 +442,7 @@ public:
                 auto const branches_count = node.external_bitmap.total();
                 auto const child_idx = branches_count + idx / 2;
                 longest = std::pair{
-                        static_cast<uint8_t>(slice.offset() + slice.len()),
+                        static_cast<uint8_t>(slice.offset() + *len),
                         static_cast<T*>(node.children[child_idx].pointers[idx % 2]),
                 };
             }
