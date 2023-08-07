@@ -39,6 +39,59 @@ TEST_CASE("", "[ExternalBitMap][exists][before]") {
     REQUIRE(bitmap.before(4) == 2);
 }
 
+TEST_CASE("", "[InternalBitMap][set][unset][exists]") {
+    detail::InternalBitMap bitmap(0b0'1000000000001010'10000010'1001'10'1);
+    SECTION("4 length") {
+        uint8_t idx;
+        REQUIRE(!bitmap.exists(idx, 14, 4));
+        bitmap.set(14, 4);
+        REQUIRE(bitmap.exists(idx, 14, 4));
+        REQUIRE(idx == 8);
+        bitmap.unset(14, 4);
+        REQUIRE(!bitmap.exists(idx, 14, 4));
+    }
+
+    SECTION("3 length") {
+        uint8_t idx;
+        REQUIRE(!bitmap.exists(idx, 6, 3));
+        bitmap.set(6, 3);
+        REQUIRE(bitmap.exists(idx, 6, 3));
+        REQUIRE(idx == 5);
+        bitmap.unset(6, 3);
+        REQUIRE(!bitmap.exists(idx, 6, 3));
+    }
+
+    SECTION("2 length") {
+        uint8_t idx;
+        REQUIRE(!bitmap.exists(idx, 2, 2));
+        bitmap.set(2, 2);
+        REQUIRE(bitmap.exists(idx, 2, 2));
+        REQUIRE(idx == 3);
+        bitmap.unset(2, 2);
+        REQUIRE(!bitmap.exists(idx, 2, 2));
+    }
+
+    SECTION("1 length") {
+        uint8_t idx;
+        REQUIRE(!bitmap.exists(idx, 0, 1));
+        bitmap.set(0, 1);
+        REQUIRE(bitmap.exists(idx, 0, 1));
+        REQUIRE(idx == 1);
+        bitmap.unset(0, 1);
+        REQUIRE(!bitmap.exists(idx, 0, 1));
+    }
+
+    SECTION("0 length") {
+        uint8_t idx;
+        REQUIRE(bitmap.exists(idx, 0, 0));
+        bitmap.unset(0, 0);
+        REQUIRE(!bitmap.exists(idx, 0, 0));
+        bitmap.set(0, 0);
+        REQUIRE(bitmap.exists(idx, 0, 0));
+        REQUIRE(idx == 0);
+    }
+}
+
 TEST_CASE("", "[InternalBitMap][longest_before]") {
     detail::InternalBitMap bitmap(0b0'1000000000001010'10000010'1001'10'1);
     uint8_t idx;
@@ -120,10 +173,7 @@ TEST_CASE("Branch manipulation", "[NodeVec][with_new_branch]") {
     MallocResource guard{&vec};
     std::array<detail::ErasedNode, 3> fake;
     SECTION("insert the first branch") {
-        vec.insert_branch(0,
-                          detail::Node{.internal_bitmap = {},
-                                       .external_bitmap = {},
-                                       .children = &fake[0]});
+        vec.insert_branch(0, detail::Node{{}, {}, &fake[0]});
         REQUIRE(vec.branches().size() == 1);
         REQUIRE(vec.branches()[0].node.children == &fake[0]);
 
@@ -161,6 +211,33 @@ TEST_CASE("Branch manipulation", "[NodeVec][with_new_branch]") {
             REQUIRE(vec.branches()[1].node.children == &fake[2]);
             REQUIRE(vec.branches()[2].node.children == &fake[1]);
         }
+    }
+}
+
+TEST_CASE("Erase value", "[NodeVec][erase_value]") {
+    detail::NodeVec vec{nullptr, 0, 0};
+    MallocResource guard{&vec};
+    std::array<detail::ErasedNode, 3> fake;
+    vec.insert_value(0, &fake[0]);
+    vec.insert_value(1, &fake[1]);
+    vec.insert_value(2, &fake[2]);
+    SECTION("erase first") {
+        vec.erase_value(0);
+        REQUIRE(vec.values().size() == 2);
+        REQUIRE(vec.value(0) == &fake[1]);
+        REQUIRE(vec.value(1) == &fake[2]);
+    }
+    SECTION("erase last") {
+        vec.erase_value(2);
+        REQUIRE(vec.values().size() == 2);
+        REQUIRE(vec.value(0) == &fake[0]);
+        REQUIRE(vec.value(1) == &fake[1]);
+    }
+    SECTION("erase middle") {
+        vec.erase_value(1);
+        REQUIRE(vec.values().size() == 2);
+        REQUIRE(vec.value(0) == &fake[0]);
+        REQUIRE(vec.value(1) == &fake[2]);
     }
 }
 

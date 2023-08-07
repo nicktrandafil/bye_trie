@@ -59,7 +59,7 @@ public:
         assert(i < 32);
         assert(len < stride);
         switch (len) {
-        [[likely]] case 4:
+        case 4:
             if (auto const idx = (1u << (15 + (i & 0b1111))); inner & idx) {
                 values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
                 return 4;
@@ -130,7 +130,7 @@ public:
         assert(i < 32);
         assert(len < stride);
         switch (len) {
-        [[likely]] case 4:
+        case 4:
             inner |= (1u << (15 + i));
             break;
         case 3:
@@ -143,7 +143,29 @@ public:
             inner |= (1u << (1 + i));
             break;
         default:
-            inner |= 1;
+            inner |= 1u;
+            break;
+        }
+    }
+
+    void unset(uint8_t i, uint8_t len) {
+        assert(i < 32);
+        assert(len < stride);
+        switch (len) {
+        case 4:
+            inner &= ~(1u << (15 + i));
+            break;
+        case 3:
+            inner &= ~(1u << (7 + i));
+            break;
+        case 2:
+            inner &= ~(1u << (3 + i));
+            break;
+        case 1:
+            inner &= ~(1u << (1 + i));
+            break;
+        default:
+            inner &= ~1u;
             break;
         }
     }
@@ -259,7 +281,7 @@ public:
         return take_slice(bits_, start_, len_);
     }
 
-    BitsSlice sub(uint8_t start) const noexcept {
+    BitsSlice sub(uint32_t start) const noexcept {
         assert(start <= len_);
         BitsSlice ret{*this};
         ret.start_ += start;
@@ -267,7 +289,7 @@ public:
         return ret;
     }
 
-    BitsSlice sub(uint8_t start, uint8_t len) const noexcept {
+    BitsSlice sub(unsigned start, unsigned len) const noexcept {
         assert(len <= len_);
         assert(start <= len_);
         BitsSlice ret{*this};
@@ -280,6 +302,35 @@ private:
     T bits_;
     uint8_t start_;
     uint8_t len_;
+};
+
+template <class T>
+concept Trivial = std::is_trivial_v<T>;
+
+template <Trivial T, size_t Capacity = 31>
+class StaticVec {
+public:
+    using Storage = std::array<T, Capacity>;
+
+    explicit StaticVec(unsigned size)
+            : size_{size} {
+    }
+
+    auto begin() const noexcept {
+        return storage_.begin();
+    }
+
+    auto end() const noexcept {
+        return storage_.begin() + size_;
+    }
+
+    T operator[](size_t i) const noexcept {
+        return storage_[i];
+    }
+
+private:
+    unsigned size_{0};
+    Storage storage_;
 };
 
 class NodeVec {
@@ -346,6 +397,44 @@ public:
         return inner.data();
     }
 
+    void erase_branch(uint8_t i) noexcept {
+        assert(i < branches_count);
+        assert(branches_count > 0);
+
+        std::rotate(inner.begin() + i, inner.begin() + i + 1, inner.end());
+
+        branches_count -= 1;
+        total_count -= 1;
+        auto const ptr = std::realloc(inner.data(), total_count * sizeof(ErasedNode));
+        assert(ptr != nullptr);
+        inner = std::span{static_cast<ErasedNode*>(ptr), total_count};
+    }
+
+    void* erase_value(uint8_t i) noexcept {
+        assert(i < values_count);
+        assert(values_count > 0);
+
+        auto const values = inner.subspan(branches_count);
+        auto const bytes = as_writable_bytes(values);
+
+        constexpr auto value_size = sizeof(void*);
+        auto const ret = values[i / 2].pointers[i % 2];
+        std::rotate(bytes.begin() + i * value_size,
+                    bytes.begin() + (i + 1) * value_size,
+                    bytes.end());
+
+        values_count -= 1;
+
+        if (values_count % 2 == 0) {
+            total_count -= 1;
+            auto const ptr = std::realloc(inner.data(), total_count * sizeof(ErasedNode));
+            assert(ptr != nullptr);
+            inner = std::span{static_cast<ErasedNode*>(ptr), total_count};
+        }
+
+        return ret;
+    }
+
     void* value(uint8_t i) const noexcept {
         assert(i < values_count);
         return inner[branches_count + i / 2].pointers[i % 2];
@@ -355,12 +444,17 @@ public:
         return inner.subspan(0, branches_count);
     }
 
-    std::span<ErasedNode> values() const noexcept {
-        return inner.subspan(branches_count);
+    StaticVec<void*> values() const noexcept {
+        StaticVec<void*> ret(values_count);
+        assert(false);
     }
 
     ErasedNode* data() noexcept {
         return inner.data();
+    }
+
+    uint8_t total() const noexcept {
+        return total_count;
     }
 
 private:
@@ -418,14 +512,15 @@ public:
         }
 
         auto const value_idx = prefix.value();
-        uint8_t idx;
-        if (node->internal_bitmap.exists(idx, value_idx, prefix.len())) {
-            auto const branches_count = node->external_bitmap.total();
-            auto const child_idx = branches_count + idx / 2;
-            return static_cast<T*>(node->children[child_idx].pointers[idx % 2]);
-        } else {
+        uint8_t vec_idx;
+        if (!node->internal_bitmap.exists(vec_idx, value_idx, prefix.len())) {
             return nullptr;
         }
+
+        return static_cast<T*>(detail::NodeVec{node->children,
+                                               node->external_bitmap.total(),
+                                               static_cast<uint8_t>(vec_idx + 1)}
+                                       .value(vec_idx));
     }
 
     std::optional<std::pair<uint8_t, T*>> match_longest(uint32_t bits,
@@ -436,18 +531,49 @@ public:
         find_leaf(node, prefix, [&longest](auto node, auto prefix) {
             auto const slice = prefix.sub(0, std::min(detail::stride_m_1, prefix.len()));
             auto const value_idx = slice.value();
-            uint8_t idx;
-            if (auto const len =
-                        node.internal_bitmap.find_longest(idx, value_idx, slice.len())) {
-                auto const branches_count = node.external_bitmap.total();
-                auto const child_idx = branches_count + idx / 2;
+            uint8_t vec_idx;
+            if (auto const len = node.internal_bitmap.find_longest(
+                        vec_idx, value_idx, slice.len())) {
                 longest = std::pair{
                         static_cast<uint8_t>(slice.offset() + *len),
-                        static_cast<T*>(node.children[child_idx].pointers[idx % 2]),
+                        static_cast<T*>(detail::NodeVec{node.children,
+                                                        node.external_bitmap.total(),
+                                                        static_cast<uint8_t>(vec_idx + 1)}
+                                                .value(vec_idx)),
                 };
             }
         });
         return longest;
+    }
+
+    bool erase_exact(uint32_t bits, uint8_t len) noexcept {
+        detail::Node* node = &root_;
+        detail::BitsSlice<uint32_t> prefix{bits, 0, len};
+
+        find_leaf(node, prefix, noop);
+        if (prefix.len() > detail::stride_m_1) {
+            return false;
+        }
+
+        auto const value_idx = prefix.value();
+        uint8_t idx;
+        if (!node->internal_bitmap.exists(idx, value_idx, prefix.len())) {
+            return false;
+        }
+
+        detail::NodeVec vec{node->children,
+                            node->external_bitmap.total(),
+                            node->internal_bitmap.total()};
+
+        if (vec.total() < 2) [[unlikely]] {
+            erase_cleaning(bits, len);
+            return true;
+        }
+
+        delete static_cast<T*>(vec.erase_value(value_idx));
+        node->internal_bitmap.unset(idx, prefix.len());
+        size_ -= 1;
+        return true;
     }
 
     /// \throw std::bad_alloc
@@ -465,14 +591,14 @@ public:
                            stack.begin() + m,
                            [](auto x) { return x.node; });
 
-            auto const values_count = node.internal_bitmap.total();
-            std::for_each(node.children + branches_count,
-                          node.children + branches_count + values_count / 2
-                                  + values_count % 2,
-                          [](auto x) {
-                              delete static_cast<T*>(x.pointers[0]);
-                              delete static_cast<T*>(x.pointers[1]);
-                          });
+            std::ranges::for_each(detail::NodeVec{node.children,
+                                                  branches_count,
+                                                  node.internal_bitmap.total()}
+                                          .values(),
+                                  [](auto x) {
+                                      delete static_cast<T*>(x.pointers[0]);
+                                      delete static_cast<T*>(x.pointers[1]);
+                                  });
 
             std::free(node.children);
         }
@@ -535,6 +661,42 @@ private:
 
         size_ += 1;
         return nullptr;
+    }
+
+    /// \pre Exists
+    void erase_cleaning(uint32_t bits, uint8_t len) {
+        std::array<detail::Node,
+                   sizeof(uint32_t) * 8
+                           / (detail::stride + sizeof(uint32_t) * 8 % detail::stride > 0)>
+                stack;
+
+        detail::Node* node = &root_;
+        detail::BitsSlice<uint32_t> prefix{bits, 0, len};
+
+        size_t level = 0;
+        find_leaf(node, prefix, [&level, &stack](auto node, auto) {
+            stack[level++] = node;
+        });
+
+        detail::NodeVec const vec{node->children, 0, 1};
+        delete static_cast<T*>(vec.value(0));
+        std::free(node->children);
+        level -= 1;
+        size_ -= 1;
+
+        prefix = detail::BitsSlice<uint32_t>{bits, 0, len};
+        while (level--) {
+            auto const slice = prefix.sub(level * detail::stride);
+            detail::NodeVec vec{stack[level].children,
+                                stack[level].external_bitmap.total(),
+                                stack[level].internal_bitmap.total()};
+
+            if (vec.total() < 2) {
+                std::free(stack[level].children);
+            } else {
+                vec.erase_branch(slice.value());
+            }
+        }
     }
 
 private:
