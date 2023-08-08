@@ -52,11 +52,18 @@ function(set_target_build_settings target)
 endfunction()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_CLEAN_FILES ${CMAKE_BINARY_DIR}/dcov)
     add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/cov.sh
-    COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/scripts/cov.sh ${CMAKE_BINARY_DIR}
-    DEPENDS scripts/cov.sh)
-    add_custom_target(${PROJECT_NAME}_cov ALL DEPENDS ${CMAKE_BINARY_DIR}/cov.sh)
-    set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${CMAKE_BINARY_DIR}/dcov)
+        COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/scripts/cov.sh ${CMAKE_BINARY_DIR}
+        DEPENDS scripts/cov.sh
+    )
+    add_custom_target(coverage DEPENDS ${CMAKE_BINARY_DIR}/cov.sh
+        DEPENDS test_${PROJECT_NAME}
+    )
+    add_custom_command(TARGET coverage POST_BUILD
+        COMMAND ./cov.sh
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
 endif()
 
 option(${PROJECT_NAME}_TESTING "Enable testing" OFF)

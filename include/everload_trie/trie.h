@@ -201,6 +201,11 @@ public:
         inner |= 1u << i;
     }
 
+    void unset(uint8_t i) {
+        assert(i < 32);
+        inner &= ~(1u << i);
+    }
+
 private:
     uint32_t inner;
 };
@@ -281,7 +286,7 @@ public:
         return take_slice(bits_, start_, len_);
     }
 
-    BitsSlice sub(uint32_t start) const noexcept {
+    BitsSlice sub(size_t start) const noexcept {
         assert(start <= len_);
         BitsSlice ret{*this};
         ret.start_ += start;
@@ -324,8 +329,16 @@ public:
         return storage_.begin() + size_;
     }
 
+    T& operator[](size_t i) noexcept {
+        return storage_[i];
+    }
+
     T operator[](size_t i) const noexcept {
         return storage_[i];
+    }
+
+    unsigned size() const noexcept {
+        return size_;
     }
 
 private:
@@ -338,9 +351,9 @@ public:
     NodeVec(ErasedNode* ptr, uint8_t branches_count, uint8_t values_count) noexcept
             : branches_count{branches_count}
             , values_count{values_count}
-            , total_count{static_cast<uint8_t>(branches_count + values_count / 2
-                                               + values_count % 2)}
-            , inner{std::span{ptr, total_count}} {
+            , inner{std::span{ptr,
+                              static_cast<size_t>(branches_count + values_count / 2
+                                                  + values_count % 2)}} {
     }
 
     NodeVec(NodeVec const&) = delete;
@@ -349,17 +362,16 @@ public:
     /// \throw std::bad_alloc
     ErasedNode* insert_branch(uint8_t i, Node branch) noexcept(false) {
         assert(i <= branches_count);
-        auto const new_size = (total_count + 1) * sizeof(ErasedNode);
+        auto const new_size = (inner.size() + 1) * sizeof(ErasedNode);
         auto const ptr = std::realloc(inner.data(), new_size);
         if (ptr == nullptr) {
             throw std::bad_alloc{};
         }
 
         branches_count += 1;
-        total_count += 1;
-        inner = std::span{static_cast<ErasedNode*>(ptr), total_count};
+        inner = std::span{static_cast<ErasedNode*>(ptr), inner.size() + 1};
 
-        std::rotate(inner.begin() + i, inner.begin() + total_count - 1, inner.end());
+        std::rotate(inner.begin() + i, inner.end() - 1, inner.end());
 
         inner[i].node = branch;
 
@@ -371,15 +383,14 @@ public:
         assert(i <= values_count);
 
         if (values_count % 2 == 0) {
-            auto const new_size = (total_count + 1) * sizeof(ErasedNode);
+            auto const new_size = (inner.size() + 1) * sizeof(ErasedNode);
             auto const ptr = std::realloc(inner.data(), new_size);
             if (ptr == nullptr) {
                 throw std::bad_alloc{};
             }
 
-            total_count += 1;
-            inner = std::span{static_cast<ErasedNode*>(ptr), total_count};
-            inner[total_count - 1].pointers = {};
+            inner = std::span{static_cast<ErasedNode*>(ptr), inner.size() + 1};
+            inner.back().pointers = {};
         }
 
         values_count += 1;
@@ -400,14 +411,12 @@ public:
     void erase_branch(uint8_t i) noexcept {
         assert(i < branches_count);
         assert(branches_count > 0);
-
         std::rotate(inner.begin() + i, inner.begin() + i + 1, inner.end());
-
-        branches_count -= 1;
-        total_count -= 1;
-        auto const ptr = std::realloc(inner.data(), total_count * sizeof(ErasedNode));
+        auto const new_size = (inner.size() - 1) * sizeof(ErasedNode);
+        auto const ptr = std::realloc(inner.data(), new_size);
         assert(ptr != nullptr);
-        inner = std::span{static_cast<ErasedNode*>(ptr), total_count};
+        inner = std::span{static_cast<ErasedNode*>(ptr), inner.size() - 1};
+        branches_count -= 1;
     }
 
     void* erase_value(uint8_t i) noexcept {
@@ -426,10 +435,10 @@ public:
         values_count -= 1;
 
         if (values_count % 2 == 0) {
-            total_count -= 1;
-            auto const ptr = std::realloc(inner.data(), total_count * sizeof(ErasedNode));
+            auto const new_size = (inner.size() - 1) * sizeof(ErasedNode);
+            auto const ptr = std::realloc(inner.data(), new_size);
             assert(ptr != nullptr);
-            inner = std::span{static_cast<ErasedNode*>(ptr), total_count};
+            inner = std::span{static_cast<ErasedNode*>(ptr), inner.size() - 1};
         }
 
         return ret;
@@ -446,21 +455,27 @@ public:
 
     StaticVec<void*> values() const noexcept {
         StaticVec<void*> ret(values_count);
-        assert(false);
+        auto const src = inner.subspan(branches_count);
+        auto i = 0u;
+        for (auto x : src) {
+            ret[i * 2] = x.pointers[0];
+            ret[i * 2 + 1] = x.pointers[1];
+            i += 1;
+        }
+        return ret;
     }
 
     ErasedNode* data() noexcept {
         return inner.data();
     }
 
-    uint8_t total() const noexcept {
-        return total_count;
+    uint8_t size() const noexcept {
+        return branches_count + values_count;
     }
 
 private:
     uint8_t branches_count;
     uint8_t values_count;
-    uint8_t total_count;
     std::span<ErasedNode> inner;
 };
 
@@ -497,7 +512,7 @@ public:
     T* insert(uint32_t bits, uint8_t len, T value) & noexcept(false) {
         detail::Node* node = &root_;
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
-        find_leaf(node, prefix, noop);
+        find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix);
         return add_value(node, prefix, value);
     }
@@ -506,7 +521,7 @@ public:
         detail::Node* node = &root_;
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
 
-        find_leaf(node, prefix, noop);
+        find_leaf_branch(node, prefix, noop);
         if (prefix.len() > detail::stride_m_1) {
             return nullptr;
         }
@@ -528,7 +543,7 @@ public:
         detail::Node* node = &root_;
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
         std::optional<std::pair<uint8_t, T*>> longest;
-        find_leaf(node, prefix, [&longest](auto node, auto prefix) {
+        find_leaf_branch(node, prefix, [&longest](auto node, auto prefix) {
             auto const slice = prefix.sub(0, std::min(detail::stride_m_1, prefix.len()));
             auto const value_idx = slice.value();
             uint8_t vec_idx;
@@ -550,7 +565,7 @@ public:
         detail::Node* node = &root_;
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
 
-        find_leaf(node, prefix, noop);
+        find_leaf_branch(node, prefix, noop);
         if (prefix.len() > detail::stride_m_1) {
             return false;
         }
@@ -565,15 +580,20 @@ public:
                             node->external_bitmap.total(),
                             node->internal_bitmap.total()};
 
-        if (vec.total() < 2) [[unlikely]] {
+        if (vec.size() < 2) [[unlikely]] {
             erase_cleaning(bits, len);
             return true;
         }
 
         delete static_cast<T*>(vec.erase_value(value_idx));
+        node->children = vec.data();
         node->internal_bitmap.unset(idx, prefix.len());
         size_ -= 1;
         return true;
+    }
+
+    size_t size() const noexcept {
+        return size_;
     }
 
     /// \throw std::bad_alloc
@@ -595,10 +615,7 @@ public:
                                                   branches_count,
                                                   node.internal_bitmap.total()}
                                           .values(),
-                                  [](auto x) {
-                                      delete static_cast<T*>(x.pointers[0]);
-                                      delete static_cast<T*>(x.pointers[1]);
-                                  });
+                                  [](auto x) { delete static_cast<T*>(x); });
 
             std::free(node.children);
         }
@@ -607,9 +624,9 @@ public:
 private:
     static constexpr auto noop = [](auto...) {};
 
-    static void find_leaf(detail::Node*& node,
-                          detail::BitsSlice<uint32_t>& prefix,
-                          auto on_node) noexcept {
+    static void find_leaf_branch(detail::Node*& node,
+                                 detail::BitsSlice<uint32_t>& prefix,
+                                 auto on_node) noexcept {
         while (prefix.len() >= detail::stride) {
             on_node(*node, prefix);
             auto const branch_idx = prefix.sub(0, detail::stride).value();
@@ -665,7 +682,7 @@ private:
 
     /// \pre Exists
     void erase_cleaning(uint32_t bits, uint8_t len) {
-        std::array<detail::Node,
+        std::array<detail::Node**,
                    sizeof(uint32_t) * 8
                            / (detail::stride + sizeof(uint32_t) * 8 % detail::stride > 0)>
                 stack;
@@ -674,8 +691,8 @@ private:
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
 
         size_t level = 0;
-        find_leaf(node, prefix, [&level, &stack](auto node, auto) {
-            stack[level++] = node;
+        find_leaf_branch(node, prefix, [&level, &stack](auto& node, auto) {
+            stack[level++] = &node;
         });
 
         detail::NodeVec const vec{node->children, 0, 1};
@@ -687,14 +704,17 @@ private:
         prefix = detail::BitsSlice<uint32_t>{bits, 0, len};
         while (level--) {
             auto const slice = prefix.sub(level * detail::stride);
-            detail::NodeVec vec{stack[level].children,
-                                stack[level].external_bitmap.total(),
-                                stack[level].internal_bitmap.total()};
+            detail::NodeVec vec{(**stack[level]).children,
+                                (**stack[level]).external_bitmap.total(),
+                                (**stack[level]).internal_bitmap.total()};
 
-            if (vec.total() < 2) {
-                std::free(stack[level].children);
+            if (vec.size() < 2) {
+                std::free((**stack[level]).children);
             } else {
                 vec.erase_branch(slice.value());
+                (**stack[level]).children = vec.data();
+                (**stack[level]).external_bitmap.unset(slice.value());
+                break;
             }
         }
     }

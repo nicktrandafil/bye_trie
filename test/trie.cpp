@@ -178,34 +178,22 @@ TEST_CASE("Branch manipulation", "[NodeVec][with_new_branch]") {
         REQUIRE(vec.branches()[0].node.children == &fake[0]);
 
         SECTION("insert a branch before") {
-            vec.insert_branch(0,
-                              detail::Node{.internal_bitmap = {},
-                                           .external_bitmap = {},
-                                           .children = &fake[1]});
+            vec.insert_branch(0, detail::Node{{}, {}, &fake[1]});
             REQUIRE(vec.branches().size() == 2);
             REQUIRE(vec.branches()[0].node.children == &fake[1]);
             REQUIRE(vec.branches()[1].node.children == &fake[0]);
         }
 
         SECTION("insert a branch after") {
-            vec.insert_branch(1,
-                              detail::Node{.internal_bitmap = {},
-                                           .external_bitmap = {},
-                                           .children = &fake[1]});
+            vec.insert_branch(1, detail::Node{{}, {}, &fake[1]});
             REQUIRE(vec.branches().size() == 2);
             REQUIRE(vec.branches()[0].node.children == &fake[0]);
             REQUIRE(vec.branches()[1].node.children == &fake[1]);
         }
 
         SECTION("insert a branch between") {
-            vec.insert_branch(1,
-                              detail::Node{.internal_bitmap = {},
-                                           .external_bitmap = {},
-                                           .children = &fake[1]});
-            vec.insert_branch(1,
-                              detail::Node{.internal_bitmap = {},
-                                           .external_bitmap = {},
-                                           .children = &fake[2]});
+            vec.insert_branch(1, detail::Node{{}, {}, &fake[1]});
+            vec.insert_branch(1, detail::Node{{}, {}, &fake[2]});
             REQUIRE(vec.branches().size() == 3);
             REQUIRE(vec.branches()[0].node.children == &fake[0]);
             REQUIRE(vec.branches()[1].node.children == &fake[2]);
@@ -241,73 +229,102 @@ TEST_CASE("Erase value", "[NodeVec][erase_value]") {
     }
 }
 
-TEST_CASE("Values' array manipulation", "[Trie][insert]") {
-    everload_trie::Trie<int> trie;
-    SECTION("insert the first value") {
-        REQUIRE(trie.insert(1, 4, 1) == nullptr);
-        SECTION("value already exists") {
-            REQUIRE(*trie.insert(1, 4, 100) == 1);
-        }
+TEST_CASE("Erase branch", "[NodeVec][erase_branch]") {
+    detail::NodeVec vec{nullptr, 0, 0};
+    MallocResource guard{&vec};
+    std::array<detail::ErasedNode, 3> fake;
+    vec.insert_branch(0, detail::Node{{}, {}, &fake[0]});
+    vec.insert_branch(1, detail::Node{{}, {}, &fake[1]});
+    vec.insert_branch(2, detail::Node{{}, {}, &fake[2]});
+    SECTION("erase first") {
+        vec.erase_branch(0);
+        REQUIRE(vec.branches().size() == 2);
+        REQUIRE(vec.branches()[0].node.children == &fake[1]);
+        REQUIRE(vec.branches()[1].node.children == &fake[2]);
+    }
+    SECTION("erase last") {
+        vec.erase_branch(2);
+        REQUIRE(vec.branches().size() == 2);
+        REQUIRE(vec.branches()[0].node.children == &fake[0]);
+        REQUIRE(vec.branches()[1].node.children == &fake[1]);
+    }
+    SECTION("erase middle") {
+        vec.erase_branch(1);
+        REQUIRE(vec.branches().size() == 2);
+        REQUIRE(vec.branches()[0].node.children == &fake[0]);
+        REQUIRE(vec.branches()[1].node.children == &fake[2]);
+    }
+}
 
-        SECTION("insert a value before") {
-            REQUIRE(trie.insert(0, 4, 2) == nullptr);
+TEST_CASE("Insert values", "[Trie][insert]") {
+    SECTION("No branching") {
+        everload_trie::Trie<int> trie;
+        SECTION("insert the first value") {
+            REQUIRE(trie.insert(1, 4, 1) == nullptr);
             SECTION("value already exists") {
-                REQUIRE(*trie.insert(0, 4, 100) == 2);
+                REQUIRE(*trie.insert(1, 4, 100) == 1);
+            }
+
+            SECTION("insert a value before") {
+                REQUIRE(trie.insert(0, 4, 2) == nullptr);
+                SECTION("value already exists") {
+                    REQUIRE(*trie.insert(0, 4, 100) == 2);
+                }
+            }
+
+            SECTION("insert a value after") {
+                REQUIRE(trie.insert(2, 4, 2) == nullptr);
+                SECTION("value already exists") {
+                    REQUIRE(*trie.insert(2, 4, 100) == 2);
+                }
+            }
+
+            SECTION("insert a value between") {
+                REQUIRE(trie.insert(4, 4, 2) == nullptr);
+                REQUIRE(trie.insert(3, 4, 3) == nullptr);
+                SECTION("values already exist") {
+                    REQUIRE(*trie.insert(4, 4, 100) == 2);
+                    REQUIRE(*trie.insert(3, 4, 100) == 3);
+                }
             }
         }
+    }
 
-        SECTION("insert a value after") {
-            REQUIRE(trie.insert(2, 4, 2) == nullptr);
+    SECTION("Branching") {
+        everload_trie::Trie<int> trie;
+        SECTION("insert the first branch") {
+            REQUIRE(trie.insert(0b0000'00001, 6, 1) == nullptr);
             SECTION("value already exists") {
-                REQUIRE(*trie.insert(2, 4, 100) == 2);
+                REQUIRE(*trie.insert(0b0000'00001, 6, 100) == 1);
             }
-        }
 
-        SECTION("insert a value between") {
-            REQUIRE(trie.insert(4, 4, 2) == nullptr);
-            REQUIRE(trie.insert(3, 4, 3) == nullptr);
-            SECTION("values already exist") {
-                REQUIRE(*trie.insert(4, 4, 100) == 2);
-                REQUIRE(*trie.insert(3, 4, 100) == 3);
+            SECTION("insert a branch before") {
+                REQUIRE(trie.insert(0b0000'0000, 6, 2) == nullptr);
+                SECTION("value already exists") {
+                    REQUIRE(*trie.insert(0b0000'0000, 6, 100) == 2);
+                }
+            }
+
+            SECTION("insert a branch after") {
+                REQUIRE(trie.insert(0b0000'00010, 6, 2) == nullptr);
+                SECTION("value already exists") {
+                    REQUIRE(*trie.insert(0b0000'00010, 6, 100) == 2);
+                }
+            }
+
+            SECTION("insert a branch between") {
+                REQUIRE(trie.insert(0b0000'00100, 6, 2) == nullptr);
+                REQUIRE(trie.insert(0b0000'00011, 6, 3) == nullptr);
+                SECTION("values already exist") {
+                    REQUIRE(*trie.insert(0b0000'00100, 6, 100) == 2);
+                    REQUIRE(*trie.insert(0b0000'00011, 6, 100) == 3);
+                }
             }
         }
     }
 }
 
-TEST_CASE("Branches' array manipulation", "[Trie][insert]") {
-    everload_trie::Trie<int> trie;
-    SECTION("insert the first branch") {
-        REQUIRE(trie.insert(0b0000'00001, 6, 1) == nullptr);
-        SECTION("value already exists") {
-            REQUIRE(*trie.insert(0b0000'00001, 6, 100) == 1);
-        }
-
-        SECTION("insert a branch before") {
-            REQUIRE(trie.insert(0b0000'0000, 6, 2) == nullptr);
-            SECTION("value already exists") {
-                REQUIRE(*trie.insert(0b0000'0000, 6, 100) == 2);
-            }
-        }
-
-        SECTION("insert a branch after") {
-            REQUIRE(trie.insert(0b0000'00010, 6, 2) == nullptr);
-            SECTION("value already exists") {
-                REQUIRE(*trie.insert(0b0000'00010, 6, 100) == 2);
-            }
-        }
-
-        SECTION("insert a branch between") {
-            REQUIRE(trie.insert(0b0000'00100, 6, 2) == nullptr);
-            REQUIRE(trie.insert(0b0000'00011, 6, 3) == nullptr);
-            SECTION("values already exist") {
-                REQUIRE(*trie.insert(0b0000'00100, 6, 100) == 2);
-                REQUIRE(*trie.insert(0b0000'00011, 6, 100) == 3);
-            }
-        }
-    }
-}
-
-TEST_CASE("", "[Trie][match]") {
+TEST_CASE("Match exact prefixes", "[Trie][match_exact]") {
     everload_trie::Trie<int> trie;
 
     SECTION("positive") {
@@ -339,7 +356,7 @@ TEST_CASE("", "[Trie][match]") {
     }
 }
 
-TEST_CASE("", "[Trie][match_longest]") {
+TEST_CASE("Match longest prefixes", "[Trie][match_longest]") {
     everload_trie::Trie<int> trie;
     trie.insert(0b0000, 4, 0);
     trie.insert(0b001, 3, 1);
@@ -374,5 +391,29 @@ TEST_CASE("", "[Trie][match_longest]") {
     SECTION("negative basic") {
         REQUIRE(!trie.match_longest(0b00010, 5));
         REQUIRE(!trie.match_longest(0b11000, 5));
+    }
+}
+
+TEST_CASE("Erase values", "[Trie][erase_exact]") {
+    SECTION("Not found") {
+        everload_trie::Trie<int> trie;
+        REQUIRE(!trie.erase_exact(0, 5));
+        REQUIRE(!trie.erase_exact(0, 4));
+    }
+    SECTION("No unfold-cleaning") {
+        everload_trie::Trie<int> trie;
+        trie.insert(0b0'00000'00000, 11, 0);
+        trie.insert(0b1'00000'00000, 11, 1);
+        REQUIRE(trie.erase_exact(0b0'00000'00000, 11));
+        REQUIRE(trie.size() == 1);
+        REQUIRE(*trie.match_exact(0b1'00000'00000, 11) == 1);
+    }
+    SECTION("Unfold-cleaning the leaf") {
+        everload_trie::Trie<int> trie;
+        trie.insert(0b0'00000'00000, 11, 0);
+        trie.insert(0b0'00000, 6, 1);
+        REQUIRE(trie.erase_exact(0b0'00000'00000, 11));
+        REQUIRE(trie.size() == 1);
+        REQUIRE(*trie.match_exact(0b0'00000, 6) == 1);
     }
 }
