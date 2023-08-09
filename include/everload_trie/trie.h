@@ -682,7 +682,7 @@ private:
 
     /// \pre Exists
     void erase_cleaning(uint32_t bits, uint8_t len) {
-        std::array<detail::Node**,
+        std::array<detail::Node*,
                    sizeof(uint32_t) * 8
                            / (detail::stride + sizeof(uint32_t) * 8 % detail::stride > 0)>
                 stack;
@@ -698,22 +698,26 @@ private:
         detail::NodeVec const vec{node->children, 0, 1};
         delete static_cast<T*>(vec.value(0));
         std::free(node->children);
+        node->children = nullptr;
+        node->internal_bitmap = {};
         level -= 1;
         size_ -= 1;
 
         prefix = detail::BitsSlice<uint32_t>{bits, 0, len};
         while (level--) {
             auto const slice = prefix.sub(level * detail::stride);
-            detail::NodeVec vec{(**stack[level]).children,
-                                (**stack[level]).external_bitmap.total(),
-                                (**stack[level]).internal_bitmap.total()};
+            detail::NodeVec vec{stack[level]->children,
+                                stack[level]->external_bitmap.total(),
+                                stack[level]->internal_bitmap.total()};
 
             if (vec.size() < 2) {
-                std::free((**stack[level]).children);
+                std::free(stack[level]->children);
+                stack[level]->children = nullptr;
+                stack[level]->external_bitmap = {};
             } else {
                 vec.erase_branch(slice.value());
-                (**stack[level]).children = vec.data();
-                (**stack[level]).external_bitmap.unset(slice.value());
+                stack[level]->children = vec.data();
+                stack[level]->external_bitmap.unset(slice.value());
                 break;
             }
         }

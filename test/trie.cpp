@@ -408,12 +408,24 @@ TEST_CASE("Erase values", "[Trie][erase_exact]") {
         REQUIRE(trie.size() == 1);
         REQUIRE(*trie.match_exact(0b1'00000'00000, 11) == 1);
     }
-    SECTION("Unfold-cleaning the leaf") {
+    SECTION("Unfold-cleaning just the leaf which contains the value") {
         everload_trie::Trie<int> trie;
         trie.insert(0b0'00000'00000, 11, 0);
         trie.insert(0b0'00000, 6, 1);
         REQUIRE(trie.erase_exact(0b0'00000'00000, 11));
         REQUIRE(trie.size() == 1);
         REQUIRE(*trie.match_exact(0b0'00000, 6) == 1);
+    }
+    SECTION("Unfold-cleaning the branch up to the root") {
+        everload_trie::Trie<int> trie;
+        trie.insert(0b0'00000'00000, 11, 0);
+        REQUIRE(trie.erase_exact(0b0'00000'00000, 11));
+        REQUIRE(trie.size() == 0);
+    }
+    SECTION("Unfold-cleaning the branch in case there is just root node") {
+        everload_trie::Trie<int> trie;
+        trie.insert(0b0001, 4, 0);
+        REQUIRE(trie.erase_exact(0b0001, 4));
+        REQUIRE(trie.size() == 0);
     }
 }
