@@ -36,6 +36,8 @@
 #include <span>
 #include <vector>
 
+static_assert(sizeof(void*) == 8, "64-bit only");
+
 namespace everload_trie {
 namespace detail {
 
@@ -251,21 +253,7 @@ constexpr inline uint8_t take_slice(uint64_t value, uint8_t start, uint8_t len) 
                  : static_cast<uint8_t>((value >> start) & ((uint64_t(1) << len) - 1));
 }
 
-inline constexpr size_t max_prefix_len = 16; // bytes
-
 template <class T>
-concept UnsignedIntegral =
-        std::unsigned_integral<T>
-        || (std::is_trivial_v<T> && sizeof(T) <= max_prefix_len && requires(T val) {
-               { val << 1 };
-               { val >> 1 };
-               { val& val };
-               { val - val };
-               { val == val };
-               { static_cast<uint64_t>(val) };
-           });
-
-template <UnsignedIntegral T>
 class BitsSlice {
 public:
     constexpr BitsSlice(T bits, uint8_t start, uint8_t len) noexcept
@@ -481,7 +469,21 @@ private:
 
 } // namespace detail
 
-template <typename T>
+template <class T>
+concept UnsignedIntegral =
+        std::unsigned_integral<T> || (std::is_trivial_v<T> && requires(T val) {
+            { val << 1 };
+            { val >> 1 };
+            { val& val };
+            { val - val };
+            { val == val };
+            { static_cast<uint64_t>(val) };
+        });
+
+template <class T>
+concept TrivialLittleObject = std::is_trivial_v<T> && sizeof(T) == 8;
+
+template <TrivialLittleObject T>
 class Trie {
 public:
     Trie() noexcept
@@ -506,10 +508,11 @@ public:
         return *this;
     }
 
-    /// \return Pointer to the value if it exists, nullptr otherwise
+    /// Insert only if the exact prefix is not present
+    /// \return Existing value
     /// \throw std::bad_alloc
-    /// \post On exception leaks 16 bytes and the prior state is preserved
-    T* insert(uint32_t bits, uint8_t len, T value) & noexcept(false) {
+    /// \post Strong exception guarantee
+    std::optional<T> insert(uint32_t bits, uint8_t len, T value) noexcept(false) {
         detail::Node* node = &root_;
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
         find_leaf_branch(node, prefix, noop);
@@ -517,25 +520,25 @@ public:
         return add_value(node, prefix, value);
     }
 
-    T* match_exact(uint32_t bits, uint8_t len) & noexcept {
+    std::optional<T> match_exact(uint32_t bits, uint8_t len) & noexcept {
         detail::Node* node = &root_;
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
 
         find_leaf_branch(node, prefix, noop);
         if (prefix.len() > detail::stride_m_1) {
-            return nullptr;
+            return std::nullopt;
         }
 
         auto const value_idx = prefix.value();
         uint8_t vec_idx;
         if (!node->internal_bitmap.exists(vec_idx, value_idx, prefix.len())) {
-            return nullptr;
+            return std::nullopt;
         }
 
-        return static_cast<T*>(detail::NodeVec{node->children,
-                                               node->external_bitmap.total(),
-                                               static_cast<uint8_t>(vec_idx + 1)}
-                                       .value(vec_idx));
+        return std::bit_cast<T>(detail::NodeVec{node->children,
+                                                node->external_bitmap.total(),
+                                                static_cast<uint8_t>(vec_idx + 1)}
+                                        .value(vec_idx));
     }
 
     std::optional<std::pair<uint8_t, T*>> match_longest(uint32_t bits,
@@ -585,7 +588,7 @@ public:
             return true;
         }
 
-        delete static_cast<T*>(vec.erase_value(value_idx));
+        vec.erase_value(value_idx);
         node->children = vec.data();
         node->internal_bitmap.unset(idx, prefix.len());
         size_ -= 1;
@@ -610,12 +613,6 @@ public:
                            node.children + branches_count,
                            stack.begin() + m,
                            [](auto x) { return x.node; });
-
-            std::ranges::for_each(detail::NodeVec{node.children,
-                                                  branches_count,
-                                                  node.internal_bitmap.total()}
-                                          .values(),
-                                  [](auto x) { delete static_cast<T*>(x); });
 
             std::free(node.children);
         }
@@ -642,6 +639,7 @@ private:
     }
 
     /// \throw std::bad_alloc
+    /// \post Strong exception guarantee
     static void extend_leaf(detail::Node*& node, detail::BitsSlice<uint32_t>& prefix) {
         while (prefix.len() >= detail::stride) {
             auto const branch_idx = prefix.sub(0, detail::stride).value();
@@ -659,7 +657,7 @@ private:
     }
 
     /// \throw std::bad_alloc
-    /// \post On exception leaks 16 bytes and the prior state is preserved
+    /// \post Strong exception guarantee
     T* add_value(detail::Node*& node, detail::BitsSlice<uint32_t> slice, T value) {
         detail::NodeVec vec{
                 node->children,
@@ -673,7 +671,8 @@ private:
             return static_cast<T*>(vec.value(vec_idx));
         }
 
-        node->children = std::move(vec).insert_value(vec_idx, new T{value});
+        node->children =
+                std::move(vec).insert_value(vec_idx, std::bit_cast<void*>(value));
         node->internal_bitmap.set(value_idx, slice.len());
 
         size_ += 1;
@@ -696,7 +695,6 @@ private:
         });
 
         detail::NodeVec const vec{node->children, 0, 1};
-        delete static_cast<T*>(vec.value(0));
         std::free(node->children);
         node->children = nullptr;
         node->internal_bitmap = {};
