@@ -549,9 +549,9 @@ public:
             return std::nullopt;
         }
 
-        auto const value_idx = prefix.value();
+        auto const idx = prefix.value();
         uint8_t vec_idx;
-        if (!node->internal_bitmap.exists(vec_idx, value_idx, prefix.len())) {
+        if (!node->internal_bitmap.exists(vec_idx, idx, prefix.len())) {
             return std::nullopt;
         }
 
@@ -568,10 +568,10 @@ public:
         std::optional<std::pair<uint8_t, T>> longest;
         find_leaf_branch(node, prefix, [&longest](auto node, auto prefix) {
             auto const slice = prefix.sub(0, std::min(detail::stride_m_1, prefix.len()));
-            auto const value_idx = slice.value();
+            auto const idx = slice.value();
             uint8_t vec_idx;
-            if (auto const len = node.internal_bitmap.find_longest(
-                        vec_idx, value_idx, slice.len())) {
+            if (auto const len =
+                        node.internal_bitmap.find_longest(vec_idx, idx, slice.len())) {
                 longest = std::pair{
                         static_cast<uint8_t>(slice.offset() + *len),
                         std::bit_cast<T>(
@@ -594,9 +594,9 @@ public:
             return false;
         }
 
-        auto const value_idx = prefix.value();
-        uint8_t idx;
-        if (!node->internal_bitmap.exists(idx, value_idx, prefix.len())) {
+        auto const idx = prefix.value();
+        uint8_t vec_idx;
+        if (!node->internal_bitmap.exists(vec_idx, idx, prefix.len())) {
             return false;
         }
 
@@ -609,9 +609,9 @@ public:
             return true;
         }
 
-        vec.erase_value(value_idx);
+        vec.erase_value(idx);
         node->children = vec.data();
-        node->internal_bitmap.unset(idx, prefix.len());
+        node->internal_bitmap.unset(vec_idx, prefix.len());
         size_ -= 1;
         return true;
     }
@@ -647,10 +647,10 @@ private:
                                  auto on_node) noexcept {
         while (prefix.len() >= detail::stride) {
             on_node(*node, prefix);
-            auto const branch_idx = prefix.sub(0, detail::stride).value();
-            if (node->external_bitmap.exists(branch_idx)) {
-                auto const idx = node->external_bitmap.before(branch_idx);
-                node = &node->children[idx].node;
+            auto const idx = prefix.sub(0, detail::stride).value();
+            if (node->external_bitmap.exists(idx)) {
+                auto const vec_idx = node->external_bitmap.before(idx);
+                node = &node->children[vec_idx].node;
             } else {
                 break;
             }
@@ -661,16 +661,17 @@ private:
 
     /// \throw std::bad_alloc
     /// \post Strong exception guarantee
-    static void extend_leaf(detail::Node*& node, detail::BitsSlice<uint32_t>& prefix) {
+    static void extend_leaf(detail::Node*& node,
+                            detail::BitsSlice<uint32_t>& prefix) noexcept(false) {
         while (prefix.len() >= detail::stride) {
-            auto const branch_idx = prefix.sub(0, detail::stride).value();
-            auto const vec_idx = node->external_bitmap.before(branch_idx);
+            auto const idx = prefix.sub(0, detail::stride).value();
+            auto const vec_idx = node->external_bitmap.before(idx);
 
             node->children = detail::NodeVec{node->children,
                                              node->external_bitmap.total(),
                                              node->internal_bitmap.total()}
                                      .insert_branch(vec_idx, detail::Node{});
-            node->external_bitmap.set(branch_idx);
+            node->external_bitmap.set(idx);
 
             node = &node->children[vec_idx].node;
             prefix = prefix.sub(detail::stride);
@@ -681,29 +682,29 @@ private:
     /// \post Strong exception guarantee
     void** match_exact_or_insert(detail::Node*& node,
                                  detail::BitsSlice<uint32_t> slice,
-                                 T value) {
+                                 T value) noexcept(false) {
         detail::NodeVec vec{
                 node->children,
                 node->external_bitmap.total(),
                 node->internal_bitmap.total(),
         };
 
-        auto const value_idx = slice.value();
+        auto const idx = slice.value();
         uint8_t vec_idx;
-        if (node->internal_bitmap.exists(vec_idx, value_idx, slice.len())) {
+        if (node->internal_bitmap.exists(vec_idx, idx, slice.len())) {
             return &vec.value(vec_idx);
         }
 
         node->children =
                 std::move(vec).insert_value(vec_idx, std::bit_cast<void*>(value));
-        node->internal_bitmap.set(value_idx, slice.len());
+        node->internal_bitmap.set(idx, slice.len());
 
         size_ += 1;
         return nullptr;
     }
 
     /// \pre Exists
-    void erase_cleaning(uint32_t bits, uint8_t len) {
+    void erase_cleaning(uint32_t bits, uint8_t len) noexcept {
         std::array<detail::Node*,
                    sizeof(uint32_t) * 8
                            / (detail::stride + sizeof(uint32_t) * 8 % detail::stride > 0)>
