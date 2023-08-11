@@ -467,6 +467,42 @@ private:
     std::span<ErasedNode> inner;
 };
 
+class RecyclingStack {
+public:
+    void recycle(std::span<ErasedNode> nodes) noexcept {
+        assert(nodes.size() > 0);
+        free_head = new (nodes.data()) FreeBlock{nodes.size(), free_head};
+    }
+
+    void push(Node node) noexcept {
+    }
+
+private:
+    struct FreeBlock {
+        size_t size;
+        FreeBlock* next;
+    };
+    static_assert(sizeof(FreeBlock) == 16);
+
+    struct UsedBlock;
+
+    union Cell {
+        UsedBlock* next;
+        Node* node;
+    };
+
+    struct UsedBlock {
+        uint32_t capacity;
+        uint32_t size;
+        Cell* cell;
+    };
+    static_assert(sizeof(UsedBlock) == 16);
+
+    std::array<Cell, 33> resident;
+    UsedBlock used_head{*new (resident.data()) UsedBlock{33, 0, resident.data()}};
+    FreeBlock* free_head{nullptr};
+};
+
 } // namespace detail
 
 template <class T>
