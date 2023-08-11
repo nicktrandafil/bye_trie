@@ -432,7 +432,7 @@ public:
         return ret;
     }
 
-    void* value(uint8_t i) const noexcept {
+    void*& value(uint8_t i) const noexcept {
         assert(i < values_count);
         return inner[branches_count + i / 2].pointers[i % 2];
     }
@@ -517,10 +517,30 @@ public:
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
         find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix);
-        return add_value(node, prefix, value);
+        auto const prev = match_exact_or_insert(node, prefix, value);
+        return prev ? std::optional(std::bit_cast<T>(*prev)) : std::nullopt;
     }
 
-    std::optional<T> match_exact(uint32_t bits, uint8_t len) & noexcept {
+    /// Replace or insert if the exact prefix is not present
+    /// \return Previous value
+    /// \throw std::bad_alloc
+    /// \post Strong exception guarantee
+    std::optional<T> replace(uint32_t bits, uint8_t len, T value) noexcept(false) {
+        detail::Node* node = &root_;
+        detail::BitsSlice<uint32_t> prefix{bits, 0, len};
+        find_leaf_branch(node, prefix, noop);
+        extend_leaf(node, prefix);
+        if (auto const old_value = match_exact_or_insert(node, prefix, value)) {
+            using std::swap;
+            auto new_value = std::bit_cast<void*>(value);
+            swap(*old_value, new_value);
+            return std::bit_cast<T>(new_value);
+        } else {
+            return std::nullopt;
+        }
+    }
+
+    std::optional<T> match_exact(uint32_t bits, uint8_t len) noexcept {
         detail::Node* node = &root_;
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
 
@@ -541,11 +561,11 @@ public:
                                         .value(vec_idx));
     }
 
-    std::optional<std::pair<uint8_t, T*>> match_longest(uint32_t bits,
-                                                        uint8_t len) & noexcept {
+    std::optional<std::pair<uint8_t, T>> match_longest(uint32_t bits,
+                                                       uint8_t len) noexcept {
         detail::Node* node = &root_;
         detail::BitsSlice<uint32_t> prefix{bits, 0, len};
-        std::optional<std::pair<uint8_t, T*>> longest;
+        std::optional<std::pair<uint8_t, T>> longest;
         find_leaf_branch(node, prefix, [&longest](auto node, auto prefix) {
             auto const slice = prefix.sub(0, std::min(detail::stride_m_1, prefix.len()));
             auto const value_idx = slice.value();
@@ -554,10 +574,11 @@ public:
                         vec_idx, value_idx, slice.len())) {
                 longest = std::pair{
                         static_cast<uint8_t>(slice.offset() + *len),
-                        static_cast<T*>(detail::NodeVec{node.children,
-                                                        node.external_bitmap.total(),
-                                                        static_cast<uint8_t>(vec_idx + 1)}
-                                                .value(vec_idx)),
+                        std::bit_cast<T>(
+                                detail::NodeVec{node.children,
+                                                node.external_bitmap.total(),
+                                                static_cast<uint8_t>(vec_idx + 1)}
+                                        .value(vec_idx)),
                 };
             }
         });
@@ -658,7 +679,9 @@ private:
 
     /// \throw std::bad_alloc
     /// \post Strong exception guarantee
-    T* add_value(detail::Node*& node, detail::BitsSlice<uint32_t> slice, T value) {
+    void** match_exact_or_insert(detail::Node*& node,
+                                 detail::BitsSlice<uint32_t> slice,
+                                 T value) {
         detail::NodeVec vec{
                 node->children,
                 node->external_bitmap.total(),
@@ -668,7 +691,7 @@ private:
         auto const value_idx = slice.value();
         uint8_t vec_idx;
         if (node->internal_bitmap.exists(vec_idx, value_idx, slice.len())) {
-            return static_cast<T*>(vec.value(vec_idx));
+            return &vec.value(vec_idx);
         }
 
         node->children =

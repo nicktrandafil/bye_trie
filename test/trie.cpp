@@ -324,6 +324,13 @@ TEST_CASE("Insert values", "[Trie][insert]") {
     }
 }
 
+TEST_CASE("", "[Trie][replace]") {
+    everload_trie::Trie<long> trie;
+    REQUIRE(trie.replace(0b0'00001, 6, 1) == std::nullopt);
+    REQUIRE(trie.replace(0b0'00001, 6, 2) == 1);
+    REQUIRE(trie.replace(0b0'00001, 6, 3) == 2);
+}
+
 TEST_CASE("Match exact prefixes", "[Trie][match_exact]") {
     everload_trie::Trie<long> trie;
 
@@ -351,8 +358,8 @@ TEST_CASE("Match exact prefixes", "[Trie][match_exact]") {
 
     SECTION("negative basic") {
         trie.insert(0, 4, 0);
-        REQUIRE(trie.match_exact(0, 5) == nullptr);
-        REQUIRE(trie.match_exact(1, 4) == nullptr);
+        REQUIRE(trie.match_exact(0, 5) == std::nullopt);
+        REQUIRE(trie.match_exact(1, 4) == std::nullopt);
     }
 }
 
@@ -366,25 +373,25 @@ TEST_CASE("Match longest prefixes", "[Trie][match_longest]") {
         SECTION("exact") {
             auto const [len, value] = *trie.match_longest(0b10000, 5);
             REQUIRE(len == 4);
-            REQUIRE(*value == 0);
+            REQUIRE(value == 0);
         }
 
         SECTION("4 longest bits, the same level") {
             auto const [len, value] = *trie.match_longest(0b00000, 5);
             REQUIRE(len == 4);
-            REQUIRE(*value == 0);
+            REQUIRE(value == 0);
         }
 
         SECTION("3 longest bits, previous level") {
             auto const [len, value] = *trie.match_longest(0b00'10001, 7);
             REQUIRE(len == 3);
-            REQUIRE(*value == 1);
+            REQUIRE(value == 1);
         }
 
         SECTION("6 longest bits, the same level") {
             auto const [len, value] = *trie.match_longest(0b10'00001, 7);
             REQUIRE(len == 6);
-            REQUIRE(*value == 2);
+            REQUIRE(value == 2);
         }
     }
 
