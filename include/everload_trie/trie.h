@@ -471,36 +471,62 @@ class RecyclingStack {
 public:
     void recycle(std::span<ErasedNode> nodes) noexcept {
         assert(nodes.size() > 0);
-        free_head = new (nodes.data()) FreeBlock{nodes.size(), free_head};
+        if (auto const size = static_cast<uint32_t>(nodes.size()); size == 1) {
+            useless_head = new (nodes.data()) Cell{Block{1, 1, useless_head}};
+        } else {
+            free_head = new (nodes.data() /*start_lifetime_as_array<Cell>(nodes.data(),
+                                             nodes.size())*/
+                             ) Cell{Block{size, 1, free_head}};
+        }
     }
 
     void push(Node node) noexcept {
+        if (used_head->block.capacity > used_head->block.size) {
+            used_head[used_head->block.size++].node = node;
+            return;
+        }
+
+        assert(free_head != nullptr);
+        auto const block = free_head;
+        free_head = free_head->block.next;
+        block->block.next = used_head;
+
+        push(node);
+    }
+
+    Node pop() noexcept {
+        if (used_head->block.size > 1) {
+            return used_head[--used_head->block.size].node;
+        }
+
+        auto const block = used_head;
+        used_head = used_head->block.next;
+        block->block.next = free_head;
+        assert(used_head);
+
+        return pop();
     }
 
 private:
-    struct FreeBlock {
-        size_t size;
-        FreeBlock* next;
-    };
-    static_assert(sizeof(FreeBlock) == 16);
+    union Cell;
 
-    struct UsedBlock;
-
-    union Cell {
-        UsedBlock* next;
-        Node* node;
-    };
-
-    struct UsedBlock {
+    struct Block {
         uint32_t capacity;
         uint32_t size;
-        Cell* cell;
+        Cell* next;
     };
-    static_assert(sizeof(UsedBlock) == 16);
+    static_assert(sizeof(Block) == 16);
 
-    std::array<Cell, 33> resident;
-    UsedBlock used_head{*new (resident.data()) UsedBlock{33, 0, resident.data()}};
-    FreeBlock* free_head{nullptr};
+    union Cell {
+        Block block;
+        Node node;
+    };
+    static_assert(sizeof(Cell) == 16);
+
+    std::array<Cell, 33> resident{};
+    Cell* used_head{new (resident.data()) Cell{.block = Block{33, 1, nullptr}}};
+    Cell* useless_head{nullptr};
+    Cell* free_head{nullptr};
 };
 
 } // namespace detail

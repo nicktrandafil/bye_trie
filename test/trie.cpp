@@ -436,3 +436,9 @@ TEST_CASE("Erase values", "[Trie][erase_exact]") {
         REQUIRE(trie.size() == 0);
     }
 }
+
+TEST_CASE("", "[RecyclingStack]") {
+    std::array<detail::ErasedNode, 1> storage;
+
+
+}
