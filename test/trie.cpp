@@ -438,7 +438,55 @@ TEST_CASE("Erase values", "[Trie][erase_exact]") {
 }
 
 TEST_CASE("", "[RecyclingStack]") {
-    std::array<detail::ErasedNode, 1> storage;
+    SECTION("useless") {
+        std::array<detail::ErasedNode, 1> storage;
+        detail::RecyclingStack stack;
+        stack.recycle(std::span(storage));
+        int i = 0;
+        stack.for_each_useless([&storage, &i](auto ptr) {
+            REQUIRE(ptr == storage.data());
+            i += 1;
+        });
+        REQUIRE(i == 1);
+    }
+    SECTION("free") {
+        std::array<detail::ErasedNode, 2> storage;
+        detail::RecyclingStack stack;
+        stack.recycle(std::span(storage));
+        int i = 0;
+        stack.for_each_free([&storage, &i](auto ptr) {
+            REQUIRE(ptr == storage.data());
+            i += 1;
+        });
+        REQUIRE(i == 1);
+    }
+    SECTION("push then pop on resident memory") {
+        detail::RecyclingStack stack;
+        for (auto i = 0u; i < 32; ++i) {
+            stack.push(detail::Node{detail::InternalBitMap{i}, {}, nullptr});
+        }
+        for (auto i = 32u; i != 0; --i) {
+            REQUIRE(stack.pop().internal_bitmap.get_inner() == i - 1);
+        }
+        REQUIRE(stack.empty());
+    }
 
-
+    SECTION("push then pop on resident memory") {
+        detail::RecyclingStack stack;
+        std::array<detail::ErasedNode, 2> storage;
+        stack.recycle(std::span(storage));
+        for (auto i = 0u; i < 33; ++i) {
+            stack.push(detail::Node{detail::InternalBitMap{i}, {}, nullptr});
+        }
+        for (auto i = 33u; i != 0; --i) {
+            REQUIRE(stack.pop().internal_bitmap.get_inner() == i - 1);
+        }
+        REQUIRE(stack.empty());
+        int i = 0;
+        stack.for_each_free([&storage, &i](auto ptr) {
+            REQUIRE(ptr == storage.data());
+            i += 1;
+        });
+        REQUIRE(i == 1);
+    }
 }

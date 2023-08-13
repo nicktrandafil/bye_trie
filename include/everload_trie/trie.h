@@ -172,6 +172,10 @@ public:
         }
     }
 
+    uint32_t get_inner() const noexcept {
+        return inner;
+    }
+
 private:
     uint32_t inner;
 };
@@ -490,6 +494,7 @@ public:
         auto const block = free_head;
         free_head = free_head->block.next;
         block->block.next = used_head;
+        used_head = block;
 
         push(node);
     }
@@ -502,9 +507,26 @@ public:
         auto const block = used_head;
         used_head = used_head->block.next;
         block->block.next = free_head;
+        free_head = block;
         assert(used_head);
 
         return pop();
+    }
+
+    void for_each_useless(auto f) noexcept {
+        for (auto block = useless_head; block != nullptr; block = block->block.next) {
+            f(static_cast<void*>(block));
+        }
+    }
+
+    void for_each_free(auto f) noexcept {
+        for (auto block = free_head; block != nullptr; block = block->block.next) {
+            f(static_cast<void*>(block));
+        }
+    }
+
+    bool empty() noexcept {
+        return used_head->block.size == 1 && used_head->block.next == nullptr;
     }
 
 private:
