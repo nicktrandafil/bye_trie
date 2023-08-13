@@ -470,7 +470,6 @@ TEST_CASE("", "[RecyclingStack]") {
         }
         REQUIRE(stack.empty());
     }
-
     SECTION("push then pop on resident memory") {
         detail::RecyclingStack stack;
         std::array<detail::ErasedNode, 2> storage;

@@ -465,6 +465,10 @@ public:
         return branches_count + values_count;
     }
 
+    std::span<ErasedNode> get_inner() const noexcept {
+        return inner;
+    }
+
 private:
     uint8_t branches_count;
     uint8_t values_count;
@@ -514,14 +518,18 @@ public:
     }
 
     void for_each_useless(auto f) noexcept {
-        for (auto block = useless_head; block != nullptr; block = block->block.next) {
+        for (auto block = useless_head; block != nullptr;) {
+            auto const next = block->block.next;
             f(static_cast<void*>(block));
+            block = next;
         }
     }
 
     void for_each_free(auto f) noexcept {
-        for (auto block = free_head; block != nullptr; block = block->block.next) {
+        for (auto block = free_head; block != nullptr;) {
+            auto const next = block->block.next;
             f(static_cast<void*>(block));
+            block = next;
         }
     }
 
@@ -704,23 +712,23 @@ public:
         return size_;
     }
 
-    /// \throw std::bad_alloc
-    ~Trie() {
-        std::vector<detail::Node> stack{{root_}};
-        while (stack.size()) { // dfs traversal
-            auto const node = stack.back();
-            stack.pop_back();
-
-            auto const branches_count = node.external_bitmap.total();
-            auto const m = stack.size();
-            stack.resize(m + branches_count);
-            std::transform(node.children,
-                           node.children + branches_count,
-                           stack.begin() + m,
-                           [](auto x) { return x.node; });
-
-            std::free(node.children);
+    ~Trie() noexcept {
+        detail::RecyclingStack stack;
+        stack.push(root_);
+        while (!stack.empty()) { // dfs traversal
+            auto const node = stack.pop();
+            detail::NodeVec vec{node.children,
+                                node.external_bitmap.total(),
+                                node.internal_bitmap.total()};
+            for (auto child : vec.branches()) {
+                stack.push(child.node);
+            }
+            if (vec.size()) {
+                stack.recycle(vec.get_inner());
+            }
         }
+        stack.for_each_useless([](auto ptr) { std::free(ptr); });
+        stack.for_each_free([](auto ptr) { std::free(ptr); });
     }
 
 private:
