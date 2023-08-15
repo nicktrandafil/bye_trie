@@ -575,7 +575,7 @@ concept UnsignedIntegral =
 template <class T>
 concept TrivialLittleObject = std::is_trivial_v<T> && sizeof(T) == 8;
 
-template <TrivialLittleObject T>
+template <UnsignedIntegral Prefix, TrivialLittleObject T>
 class Trie {
 public:
     Trie() noexcept
@@ -601,12 +601,14 @@ public:
     }
 
     /// Insert only if the exact prefix is not present
+    /// \pre len <= sizeof(Prefix) * CHAR_BIT
+    /// \post Strong exception guarantee
     /// \return Existing value
     /// \throw std::bad_alloc
-    /// \post Strong exception guarantee
-    std::optional<T> insert(uint32_t bits, uint8_t len, T value) noexcept(false) {
+    std::optional<T> insert(Prefix bits, uint8_t len, T value) noexcept(false) {
+        assert(len <= sizeof(Prefix) * CHAR_BIT);
         detail::Node* node = &root_;
-        detail::BitsSlice<uint32_t> prefix{bits, 0, len};
+        detail::BitsSlice<Prefix> prefix{bits, 0, len};
         find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix);
         auto const prev = match_exact_or_insert(node, prefix, value);
@@ -614,12 +616,14 @@ public:
     }
 
     /// Replace or insert if the exact prefix is not present
+    /// \pre len <= sizeof(Prefix) * CHAR_BIT
+    /// \post Strong exception guarantee
     /// \return Previous value
     /// \throw std::bad_alloc
-    /// \post Strong exception guarantee
-    std::optional<T> replace(uint32_t bits, uint8_t len, T value) noexcept(false) {
+    std::optional<T> replace(Prefix bits, uint8_t len, T value) noexcept(false) {
+        assert(len <= sizeof(Prefix) * CHAR_BIT);
         detail::Node* node = &root_;
-        detail::BitsSlice<uint32_t> prefix{bits, 0, len};
+        detail::BitsSlice<Prefix> prefix{bits, 0, len};
         find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix);
         if (auto const old_value = match_exact_or_insert(node, prefix, value)) {
@@ -632,9 +636,13 @@ public:
         }
     }
 
-    std::optional<T> match_exact(uint32_t bits, uint8_t len) noexcept {
+    /// Match exact prefix
+    /// \pre len <= sizeof(Prefix) * CHAR_BIT
+    std::optional<T> match_exact(Prefix bits, uint8_t len) noexcept {
+        assert(len <= sizeof(Prefix) * CHAR_BIT);
+
         detail::Node* node = &root_;
-        detail::BitsSlice<uint32_t> prefix{bits, 0, len};
+        detail::BitsSlice<Prefix> prefix{bits, 0, len};
 
         find_leaf_branch(node, prefix, noop);
         if (prefix.len() > detail::stride_m_1) {
@@ -653,19 +661,23 @@ public:
                                         .value(vec_idx));
     }
 
-    std::optional<std::pair<uint8_t, T>> match_longest(uint32_t bits,
+    /// Match longest prefix
+    /// \pre len <= sizeof(Prefix) * CHAR_BIT
+    std::optional<std::pair<uint8_t, T>> match_longest(Prefix bits,
                                                        uint8_t len) noexcept {
+        assert(len <= sizeof(Prefix) * CHAR_BIT);
         detail::Node* node = &root_;
-        detail::BitsSlice<uint32_t> prefix{bits, 0, len};
+        detail::BitsSlice<Prefix> prefix{bits, 0, len};
+
         std::optional<std::pair<uint8_t, T>> longest;
-        find_leaf_branch(node, prefix, [&longest](auto node, auto prefix) {
+        auto const update_longest = [&longest](auto node, auto prefix) {
             auto const slice = prefix.sub(0, std::min(detail::stride_m_1, prefix.len()));
             auto const idx = slice.value();
             uint8_t vec_idx;
             if (auto const len =
                         node.internal_bitmap.find_longest(vec_idx, idx, slice.len())) {
                 longest = std::pair{
-                        static_cast<uint8_t>(slice.offset() + *len),
+                        static_cast<uint8_t>(slice.offset() + len.value()),
                         std::bit_cast<T>(
                                 detail::NodeVec{node.children,
                                                 node.external_bitmap.total(),
@@ -673,13 +685,22 @@ public:
                                         .value(vec_idx)),
                 };
             }
-        });
+        };
+
+        find_leaf_branch(node, prefix, update_longest);
+
+        if (prefix.len() < detail::stride) {
+            update_longest(*node, prefix);
+        }
+
         return longest;
     }
 
-    bool erase_exact(uint32_t bits, uint8_t len) noexcept {
+    /// Erase exact prefix
+    /// \pre len <= sizeof(Prefix) * CHAR_BIT
+    bool erase_exact(Prefix bits, uint8_t len) noexcept {
         detail::Node* node = &root_;
-        detail::BitsSlice<uint32_t> prefix{bits, 0, len};
+        detail::BitsSlice<Prefix> prefix{bits, 0, len};
 
         find_leaf_branch(node, prefix, noop);
         if (prefix.len() > detail::stride_m_1) {
@@ -735,7 +756,7 @@ private:
     static constexpr auto noop = [](auto...) {};
 
     static void find_leaf_branch(detail::Node*& node,
-                                 detail::BitsSlice<uint32_t>& prefix,
+                                 detail::BitsSlice<Prefix>& prefix,
                                  auto on_node) noexcept {
         while (prefix.len() >= detail::stride) {
             on_node(*node, prefix);
@@ -748,13 +769,12 @@ private:
             }
             prefix = prefix.sub(detail::stride);
         }
-        on_node(*node, prefix);
     }
 
     /// \throw std::bad_alloc
     /// \post Strong exception guarantee
     static void extend_leaf(detail::Node*& node,
-                            detail::BitsSlice<uint32_t>& prefix) noexcept(false) {
+                            detail::BitsSlice<Prefix>& prefix) noexcept(false) {
         while (prefix.len() >= detail::stride) {
             auto const idx = prefix.sub(0, detail::stride).value();
             auto const vec_idx = node->external_bitmap.before(idx);
@@ -773,7 +793,7 @@ private:
     /// \throw std::bad_alloc
     /// \post Strong exception guarantee
     void** match_exact_or_insert(detail::Node*& node,
-                                 detail::BitsSlice<uint32_t> slice,
+                                 detail::BitsSlice<Prefix> slice,
                                  T value) noexcept(false) {
         detail::NodeVec vec{
                 node->children,
@@ -796,28 +816,28 @@ private:
     }
 
     /// \pre Exists
-    void erase_cleaning(uint32_t bits, uint8_t len) noexcept {
+    void erase_cleaning(Prefix bits, uint8_t len) noexcept {
+        assert(match_exact(bits, len).has_value());
+
         std::array<detail::Node*,
-                   sizeof(uint32_t) * 8
-                           / (detail::stride + sizeof(uint32_t) * 8 % detail::stride > 0)>
+                   sizeof(Prefix) * CHAR_BIT / detail::stride
+                           + (sizeof(Prefix) * CHAR_BIT % detail::stride > 0)>
                 stack;
 
         detail::Node* node = &root_;
-        detail::BitsSlice<uint32_t> prefix{bits, 0, len};
+        detail::BitsSlice<Prefix> prefix{bits, 0, len};
 
         size_t level = 0;
         find_leaf_branch(node, prefix, [&level, &stack](auto& node, auto) {
             stack[level++] = &node;
         });
 
-        detail::NodeVec const vec{node->children, 0, 1};
         std::free(node->children);
         node->children = nullptr;
         node->internal_bitmap = {};
-        level -= 1;
         size_ -= 1;
 
-        prefix = detail::BitsSlice<uint32_t>{bits, 0, len};
+        prefix = detail::BitsSlice<Prefix>{bits, 0, len};
         while (level--) {
             auto const slice = prefix.sub(level * detail::stride);
             detail::NodeVec vec{stack[level]->children,

@@ -258,7 +258,7 @@ TEST_CASE("Erase branch", "[NodeVec][erase_branch]") {
 
 TEST_CASE("Insert values", "[Trie][insert]") {
     SECTION("No branching") {
-        everload_trie::Trie<long> trie;
+        everload_trie::Trie<uint32_t, long> trie;
         SECTION("insert the first value") {
             REQUIRE(trie.insert(1, 4, 1) == std::nullopt);
             SECTION("value already exists") {
@@ -291,7 +291,7 @@ TEST_CASE("Insert values", "[Trie][insert]") {
     }
 
     SECTION("Branching") {
-        everload_trie::Trie<long> trie;
+        everload_trie::Trie<uint32_t, long> trie;
         SECTION("insert the first branch") {
             REQUIRE(trie.insert(0b0000'00001, 6, 1) == std::nullopt);
             SECTION("value already exists") {
@@ -325,14 +325,14 @@ TEST_CASE("Insert values", "[Trie][insert]") {
 }
 
 TEST_CASE("", "[Trie][replace]") {
-    everload_trie::Trie<long> trie;
+    everload_trie::Trie<uint32_t, long> trie;
     REQUIRE(trie.replace(0b0'00001, 6, 1) == std::nullopt);
     REQUIRE(trie.replace(0b0'00001, 6, 2) == 1);
     REQUIRE(trie.replace(0b0'00001, 6, 3) == 2);
 }
 
 TEST_CASE("Match exact prefixes", "[Trie][match_exact]") {
-    everload_trie::Trie<long> trie;
+    everload_trie::Trie<uint32_t, long> trie;
 
     SECTION("positive") {
         trie.insert(0, 4, 0);
@@ -364,7 +364,7 @@ TEST_CASE("Match exact prefixes", "[Trie][match_exact]") {
 }
 
 TEST_CASE("Match longest prefixes", "[Trie][match_longest]") {
-    everload_trie::Trie<long> trie;
+    everload_trie::Trie<uint32_t, long> trie;
     trie.insert(0b0000, 4, 0);
     trie.insert(0b001, 3, 1);
     trie.insert(0b0000'00001, 6, 2);
@@ -403,12 +403,12 @@ TEST_CASE("Match longest prefixes", "[Trie][match_longest]") {
 
 TEST_CASE("Erase values", "[Trie][erase_exact]") {
     SECTION("Not found") {
-        everload_trie::Trie<long> trie;
+        everload_trie::Trie<uint32_t, long> trie;
         REQUIRE(!trie.erase_exact(0, 5));
         REQUIRE(!trie.erase_exact(0, 4));
     }
     SECTION("No unfold-cleaning") {
-        everload_trie::Trie<long> trie;
+        everload_trie::Trie<uint32_t, long> trie;
         trie.insert(0b0'00000'00000, 11, 0);
         trie.insert(0b1'00000'00000, 11, 1);
         REQUIRE(trie.erase_exact(0b0'00000'00000, 11));
@@ -416,7 +416,7 @@ TEST_CASE("Erase values", "[Trie][erase_exact]") {
         REQUIRE(*trie.match_exact(0b1'00000'00000, 11) == 1);
     }
     SECTION("Unfold-cleaning just the leaf which contains the value") {
-        everload_trie::Trie<long> trie;
+        everload_trie::Trie<uint32_t, long> trie;
         trie.insert(0b0'00000'00000, 11, 0);
         trie.insert(0b0'00000, 6, 1);
         REQUIRE(trie.erase_exact(0b0'00000'00000, 11));
@@ -424,13 +424,13 @@ TEST_CASE("Erase values", "[Trie][erase_exact]") {
         REQUIRE(*trie.match_exact(0b0'00000, 6) == 1);
     }
     SECTION("Unfold-cleaning the branch up to the root") {
-        everload_trie::Trie<long> trie;
+        everload_trie::Trie<uint32_t, long> trie;
         trie.insert(0b0'00000'00000, 11, 0);
         REQUIRE(trie.erase_exact(0b0'00000'00000, 11));
         REQUIRE(trie.size() == 0);
     }
     SECTION("Unfold-cleaning the branch in case there is just root node") {
-        everload_trie::Trie<long> trie;
+        everload_trie::Trie<uint32_t, long> trie;
         trie.insert(0b0001, 4, 0);
         REQUIRE(trie.erase_exact(0b0001, 4));
         REQUIRE(trie.size() == 0);
