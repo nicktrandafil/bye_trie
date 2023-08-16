@@ -161,8 +161,10 @@ public:
     }
 
     ~MallocResource() noexcept {
-        std::free(vec->data());
+        alloc.dealloc(vec->data());
     }
+
+    SystemAllocator alloc;
 
 private:
     detail::NodeVec* vec;
@@ -173,27 +175,27 @@ TEST_CASE("Branch manipulation", "[NodeVec][with_new_branch]") {
     MallocResource guard{&vec};
     std::array<detail::ErasedNode, 3> fake;
     SECTION("insert the first branch") {
-        vec.insert_branch(0, detail::Node{{}, {}, &fake[0]});
+        vec.insert_branch(0, detail::Node{{}, {}, &fake[0]}, guard.alloc);
         REQUIRE(vec.branches().size() == 1);
         REQUIRE(vec.branches()[0].node.children == &fake[0]);
 
         SECTION("insert a branch before") {
-            vec.insert_branch(0, detail::Node{{}, {}, &fake[1]});
+            vec.insert_branch(0, detail::Node{{}, {}, &fake[1]}, guard.alloc);
             REQUIRE(vec.branches().size() == 2);
             REQUIRE(vec.branches()[0].node.children == &fake[1]);
             REQUIRE(vec.branches()[1].node.children == &fake[0]);
         }
 
         SECTION("insert a branch after") {
-            vec.insert_branch(1, detail::Node{{}, {}, &fake[1]});
+            vec.insert_branch(1, detail::Node{{}, {}, &fake[1]}, guard.alloc);
             REQUIRE(vec.branches().size() == 2);
             REQUIRE(vec.branches()[0].node.children == &fake[0]);
             REQUIRE(vec.branches()[1].node.children == &fake[1]);
         }
 
         SECTION("insert a branch between") {
-            vec.insert_branch(1, detail::Node{{}, {}, &fake[1]});
-            vec.insert_branch(1, detail::Node{{}, {}, &fake[2]});
+            vec.insert_branch(1, detail::Node{{}, {}, &fake[1]}, guard.alloc);
+            vec.insert_branch(1, detail::Node{{}, {}, &fake[2]}, guard.alloc);
             REQUIRE(vec.branches().size() == 3);
             REQUIRE(vec.branches()[0].node.children == &fake[0]);
             REQUIRE(vec.branches()[1].node.children == &fake[2]);
@@ -206,9 +208,9 @@ TEST_CASE("Erase value", "[NodeVec][erase_value]") {
     detail::NodeVec vec{nullptr, 0, 0};
     MallocResource guard{&vec};
     std::array<detail::ErasedNode, 3> fake;
-    vec.insert_value(0, &fake[0]);
-    vec.insert_value(1, &fake[1]);
-    vec.insert_value(2, &fake[2]);
+    vec.insert_value(0, &fake[0], guard.alloc);
+    vec.insert_value(1, &fake[1], guard.alloc);
+    vec.insert_value(2, &fake[2], guard.alloc);
     SECTION("erase first") {
         vec.erase_value(0);
         REQUIRE(vec.values().size() == 2);
@@ -233,9 +235,9 @@ TEST_CASE("Erase branch", "[NodeVec][erase_branch]") {
     detail::NodeVec vec{nullptr, 0, 0};
     MallocResource guard{&vec};
     std::array<detail::ErasedNode, 3> fake;
-    vec.insert_branch(0, detail::Node{{}, {}, &fake[0]});
-    vec.insert_branch(1, detail::Node{{}, {}, &fake[1]});
-    vec.insert_branch(2, detail::Node{{}, {}, &fake[2]});
+    vec.insert_branch(0, detail::Node{{}, {}, &fake[0]}, guard.alloc);
+    vec.insert_branch(1, detail::Node{{}, {}, &fake[1]}, guard.alloc);
+    vec.insert_branch(2, detail::Node{{}, {}, &fake[2]}, guard.alloc);
     SECTION("erase first") {
         vec.erase_branch(0);
         REQUIRE(vec.branches().size() == 2);
@@ -487,5 +489,46 @@ TEST_CASE("", "[RecyclingStack]") {
             i += 1;
         });
         REQUIRE(i == 1);
+    }
+}
+
+TEST_CASE("Exception guarantee", "[Trie][insert]") {
+    struct Alloc {
+        void* realloc(void* ptr, size_t size) noexcept(false) {
+            if (tickets-- == 0) {
+                throw std::bad_alloc();
+            } else {
+                return std::realloc(ptr, size);
+            }
+        }
+
+        void dealloc(void* ptr) noexcept {
+            std::free(ptr);
+        }
+
+        uint32_t tickets = 0;
+    };
+
+    SECTION("useless branches get freed") {
+        Trie<uint32_t, long, Alloc> trie(Alloc{2});
+        REQUIRE_THROWS_AS(trie.insert(0b0'00000'00000, 11, 0), std::bad_alloc);
+    }
+
+    SECTION("can insert on a useless branch") {
+        Trie<uint32_t, long, Alloc> trie(Alloc{2});
+        REQUIRE_THROWS_AS(trie.insert(0b0'00000'00000, 11, 0), std::bad_alloc);
+        REQUIRE(trie.insert(0b0'00000'00000, 11, 0) == std::nullopt);
+        REQUIRE(trie.match_exact(0b0'00000'00000, 11) == 0);
+    }
+
+    SECTION("try overflow RecyclingVec") {
+        Trie<uint32_t, long, Alloc> trie(Alloc{});
+        for (auto i = 0u; i < 32; ++i) {
+            trie.alloc().tickets = 6;
+            REQUIRE_THROWS_AS(trie.insert(i, 32, 0), std::bad_alloc);
+        }
+        for (auto i = 0u; i < 32; ++i) {
+            trie.insert(i << 5, 27, 0);
+        }
     }
 }

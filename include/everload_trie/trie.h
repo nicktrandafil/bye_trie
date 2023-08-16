@@ -32,8 +32,10 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <optional>
 #include <span>
+#include <type_traits>
 #include <vector>
 
 static_assert(sizeof(void*) == 8, "64-bit only");
@@ -351,36 +353,30 @@ public:
     NodeVec(NodeVec const&) = delete;
     NodeVec& operator=(NodeVec const&) = delete;
 
-    /// \throw std::bad_alloc
-    ErasedNode* insert_branch(uint8_t i, Node branch) noexcept(false) {
+    /// \throw Forwards `Alloc::realloc` exception
+    template <class Alloc>
+    ErasedNode* insert_branch(uint8_t i, Node branch, Alloc& alloc) noexcept(
+            noexcept(alloc.realloc(nullptr, 0))) {
         assert(i <= branches_count);
         auto const new_size = (inner.size() + 1) * sizeof(ErasedNode);
-        auto const ptr = std::realloc(inner.data(), new_size);
-        if (ptr == nullptr) {
-            throw std::bad_alloc{};
-        }
-
+        auto const ptr = alloc.realloc(inner.data(), new_size);
         branches_count += 1;
         inner = std::span{static_cast<ErasedNode*>(ptr), inner.size() + 1};
-
         std::rotate(inner.begin() + i, inner.end() - 1, inner.end());
-
         inner[i].node = branch;
-
         return inner.data();
     }
 
-    /// \throw std::bad_alloc
-    ErasedNode* insert_value(uint8_t i, void* value) noexcept(false) {
+    /// \throw Forwards `Alloc::realloc` exception
+    template <class Alloc>
+    ErasedNode* insert_value(uint8_t i,
+                             void* value,
+                             Alloc& alloc) noexcept(noexcept(alloc.realloc(nullptr, 0))) {
         assert(i <= values_count);
 
         if (values_count % 2 == 0) {
             auto const new_size = (inner.size() + 1) * sizeof(ErasedNode);
-            auto const ptr = std::realloc(inner.data(), new_size);
-            if (ptr == nullptr) {
-                throw std::bad_alloc{};
-            }
-
+            auto const ptr = alloc.realloc(inner.data(), new_size);
             inner = std::span{static_cast<ErasedNode*>(ptr), inner.size() + 1};
             inner.back().pointers = {};
         }
@@ -475,6 +471,11 @@ private:
     std::span<ErasedNode> inner;
 };
 
+/// Stack with value type `Node` and with preallocated memory to to hold 32 `Node`s
+/// It can recycle memory to hold more `Node`s.
+/// \note During trie destruction this stack is used to traverse the trie in DFS order.
+/// The algorithm recycles `NodeVec`s as it goes. One can mathematically prove that this
+/// stack won't go out of memory in the algorithm.
 class RecyclingStack {
 public:
     void recycle(std::span<ErasedNode> nodes) noexcept {
@@ -575,11 +576,78 @@ concept UnsignedIntegral =
 template <class T>
 concept TrivialLittleObject = std::is_trivial_v<T> && sizeof(T) == 8;
 
-template <UnsignedIntegral Prefix, TrivialLittleObject T>
-class Trie {
+struct SystemAllocator {
+    void* realloc(void* ptr, size_t size) noexcept(false) {
+        if (auto const ret = std::realloc(ptr, size)) {
+            return ret;
+        } else {
+            throw std::bad_alloc();
+        }
+    }
+
+    void dealloc(void* ptr) noexcept {
+        std::free(ptr);
+    }
+};
+
+template <class T>
+concept Allocator = std::is_nothrow_move_constructible_v<T>
+                 && std::is_nothrow_move_assignable_v<T> && requires(T alloc) {
+                        { alloc.realloc(nullptr, 0) };
+                        { alloc.dealloc(nullptr) };
+                        noexcept(alloc.dealloc(nullptr));
+                    };
+
+template <class T>
+concept ContractViolationHandler = requires(T) {
+    { T::handle() };
+};
+
+#ifdef EVERLOAD_TRIE_CONTRACT_CHECKS
+#define EVERLOAD_TRIE_ASSERT(cond, handler)                                              \
+    if (!(cond)) {                                                                       \
+        handler::handle();                                                               \
+    }                                                                                    \
+    static_assert(true)
+#else
+#define EVERLOAD_TRIE_ASSERT(...) static_assert(true)
+#endif
+
+struct Aborter {
+    [[noreturn]] static void handle() noexcept {
+        std::abort();
+    }
+};
+
+template <UnsignedIntegral P, ContractViolationHandler H = Aborter>
+class BitsPrefix {
 public:
-    Trie() noexcept
-            : root_{detail::InternalBitMap{0}, detail::ExternalBitMap{0}, nullptr} {
+    constexpr BitsPrefix(P bits, uint8_t start, uint8_t len) noexcept
+            : inner(bits, start, len) {
+        EVERLOAD_TRIE_ASSERT(start < sizeof(P) * CHAR_BIT, H);
+        EVERLOAD_TRIE_ASSERT(len <= sizeof(P) * CHAR_BIT - start, H);
+    }
+
+    /*implicit*/ operator detail::BitsSlice<P>&() noexcept {
+        return inner;
+    }
+
+private:
+    detail::BitsSlice<P> inner;
+};
+
+template <UnsignedIntegral P, TrivialLittleObject T,
+          Allocator Alloc = SystemAllocator>
+class Trie {
+  public:
+    explicit Trie() noexcept(noexcept(Alloc{}))
+            : alloc_{}
+            , root_{detail::InternalBitMap{0}, detail::ExternalBitMap{0}, nullptr} {
+    }
+
+    explicit Trie(Alloc&& alloc) noexcept
+            : alloc_{std::move(alloc)}
+            , root_{detail::InternalBitMap{0}, detail::ExternalBitMap{0}, nullptr} {
     }
 
     Trie(const Trie&) = delete;
@@ -601,31 +669,27 @@ public:
     }
 
     /// Insert only if the exact prefix is not present
-    /// \pre len <= sizeof(Prefix) * CHAR_BIT
     /// \post Strong exception guarantee
     /// \return Existing value
-    /// \throw std::bad_alloc
-    std::optional<T> insert(Prefix bits, uint8_t len, T value) noexcept(false) {
-        assert(len <= sizeof(Prefix) * CHAR_BIT);
+    /// \throw Forwards `Alloc::realloc` exception
+    std::optional<T> insert(BitsPrefix<P> prefix, T value) noexcept(noexcept(alloc_.realloc(nullptr, 0))) {
         detail::Node* node = &root_;
-        detail::BitsSlice<Prefix> prefix{bits, 0, len};
         find_leaf_branch(node, prefix, noop);
-        extend_leaf(node, prefix);
+        extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
         auto const prev = match_exact_or_insert(node, prefix, value);
         return prev ? std::optional(std::bit_cast<T>(*prev)) : std::nullopt;
     }
 
     /// Replace or insert if the exact prefix is not present
-    /// \pre len <= sizeof(Prefix) * CHAR_BIT
     /// \post Strong exception guarantee
     /// \return Previous value
-    /// \throw std::bad_alloc
-    std::optional<T> replace(Prefix bits, uint8_t len, T value) noexcept(false) {
-        assert(len <= sizeof(Prefix) * CHAR_BIT);
+    /// \throw Forwards `Alloc::realloc` exception
+    std::optional<T>
+    replace(BitsPrefix<P> prefix,
+            T value) noexcept(noexcept(alloc_.realloc(nullptr, 0))) {
         detail::Node* node = &root_;
-        detail::BitsSlice<Prefix> prefix{bits, 0, len};
         find_leaf_branch(node, prefix, noop);
-        extend_leaf(node, prefix);
+        extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
         if (auto const old_value = match_exact_or_insert(node, prefix, value)) {
             using std::swap;
             auto new_value = std::bit_cast<void*>(value);
@@ -637,12 +701,12 @@ public:
     }
 
     /// Match exact prefix
-    /// \pre len <= sizeof(Prefix) * CHAR_BIT
-    std::optional<T> match_exact(Prefix bits, uint8_t len) noexcept {
-        assert(len <= sizeof(Prefix) * CHAR_BIT);
+    /// \pre len <= sizeof(P) * CHAR_BIT
+    std::optional<T> match_exact(P bits, uint8_t len) noexcept {
+        assert(len <= sizeof(P) * CHAR_BIT);
 
         detail::Node* node = &root_;
-        detail::BitsSlice<Prefix> prefix{bits, 0, len};
+        detail::BitsSlice<P> prefix{bits, 0, len};
 
         find_leaf_branch(node, prefix, noop);
         if (prefix.len() > detail::stride_m_1) {
@@ -662,12 +726,12 @@ public:
     }
 
     /// Match longest prefix
-    /// \pre len <= sizeof(Prefix) * CHAR_BIT
-    std::optional<std::pair<uint8_t, T>> match_longest(Prefix bits,
+    /// \pre len <= sizeof(P) * CHAR_BIT
+    std::optional<std::pair<uint8_t, T>> match_longest(P bits,
                                                        uint8_t len) noexcept {
-        assert(len <= sizeof(Prefix) * CHAR_BIT);
+        assert(len <= sizeof(P) * CHAR_BIT);
         detail::Node* node = &root_;
-        detail::BitsSlice<Prefix> prefix{bits, 0, len};
+        detail::BitsSlice<P> prefix{bits, 0, len};
 
         std::optional<std::pair<uint8_t, T>> longest;
         auto const update_longest = [&longest](auto node, auto prefix) {
@@ -697,10 +761,10 @@ public:
     }
 
     /// Erase exact prefix
-    /// \pre len <= sizeof(Prefix) * CHAR_BIT
-    bool erase_exact(Prefix bits, uint8_t len) noexcept {
+    /// \pre len <= sizeof(P) * CHAR_BIT
+    bool erase_exact(P bits, uint8_t len) noexcept {
         detail::Node* node = &root_;
-        detail::BitsSlice<Prefix> prefix{bits, 0, len};
+        detail::BitsSlice<P> prefix{bits, 0, len};
 
         find_leaf_branch(node, prefix, noop);
         if (prefix.len() > detail::stride_m_1) {
@@ -748,15 +812,19 @@ public:
                 stack.recycle(vec.get_inner());
             }
         }
-        stack.for_each_useless([](auto ptr) { std::free(ptr); });
-        stack.for_each_free([](auto ptr) { std::free(ptr); });
+        stack.for_each_useless([this](auto ptr) { alloc_.dealloc(ptr); });
+        stack.for_each_free([this](auto ptr) { alloc_.dealloc(ptr); });
+    }
+
+    Alloc& alloc() noexcept {
+        return alloc_;
     }
 
 private:
     static constexpr auto noop = [](auto...) {};
 
     static void find_leaf_branch(detail::Node*& node,
-                                 detail::BitsSlice<Prefix>& prefix,
+                                 detail::BitsSlice<P>& prefix,
                                  auto on_node) noexcept {
         while (prefix.len() >= detail::stride) {
             on_node(*node, prefix);
@@ -771,10 +839,10 @@ private:
         }
     }
 
-    /// \throw std::bad_alloc
     /// \post Strong exception guarantee
-    static void extend_leaf(detail::Node*& node,
-                            detail::BitsSlice<Prefix>& prefix) noexcept(false) {
+    /// \throw Forwards `Alloc::realloc` exception
+    void extend_leaf(detail::Node*& node, detail::BitsSlice<P>& prefix) noexcept(
+            noexcept(alloc_.realloc(nullptr, 0))) {
         while (prefix.len() >= detail::stride) {
             auto const idx = prefix.sub(0, detail::stride).value();
             auto const vec_idx = node->external_bitmap.before(idx);
@@ -782,7 +850,7 @@ private:
             node->children = detail::NodeVec{node->children,
                                              node->external_bitmap.total(),
                                              node->internal_bitmap.total()}
-                                     .insert_branch(vec_idx, detail::Node{});
+                                     .insert_branch(vec_idx, detail::Node{}, alloc_);
             node->external_bitmap.set(idx);
 
             node = &node->children[vec_idx].node;
@@ -790,11 +858,11 @@ private:
         }
     }
 
-    /// \throw std::bad_alloc
     /// \post Strong exception guarantee
+    /// \throw Forwards `Alloc::realloc` exception
     void** match_exact_or_insert(detail::Node*& node,
-                                 detail::BitsSlice<Prefix> slice,
-                                 T value) noexcept(false) {
+                                 detail::BitsSlice<P> slice,
+                                 T value) noexcept(noexcept(alloc_.realloc(nullptr, 0))) {
         detail::NodeVec vec{
                 node->children,
                 node->external_bitmap.total(),
@@ -808,7 +876,7 @@ private:
         }
 
         node->children =
-                std::move(vec).insert_value(vec_idx, std::bit_cast<void*>(value));
+                std::move(vec).insert_value(vec_idx, std::bit_cast<void*>(value), alloc_);
         node->internal_bitmap.set(idx, slice.len());
 
         size_ += 1;
@@ -816,28 +884,28 @@ private:
     }
 
     /// \pre Exists
-    void erase_cleaning(Prefix bits, uint8_t len) noexcept {
+    void erase_cleaning(P bits, uint8_t len) noexcept {
         assert(match_exact(bits, len).has_value());
 
         std::array<detail::Node*,
-                   sizeof(Prefix) * CHAR_BIT / detail::stride
-                           + (sizeof(Prefix) * CHAR_BIT % detail::stride > 0)>
+                   sizeof(P) * CHAR_BIT / detail::stride
+                           + (sizeof(P) * CHAR_BIT % detail::stride > 0)>
                 stack;
 
         detail::Node* node = &root_;
-        detail::BitsSlice<Prefix> prefix{bits, 0, len};
+        detail::BitsSlice<P> prefix{bits, 0, len};
 
         size_t level = 0;
         find_leaf_branch(node, prefix, [&level, &stack](auto& node, auto) {
             stack[level++] = &node;
         });
 
-        std::free(node->children);
+        alloc_.dealloc(node->children);
         node->children = nullptr;
         node->internal_bitmap = {};
         size_ -= 1;
 
-        prefix = detail::BitsSlice<Prefix>{bits, 0, len};
+        prefix = detail::BitsSlice<P>{bits, 0, len};
         while (level--) {
             auto const slice = prefix.sub(level * detail::stride);
             detail::NodeVec vec{stack[level]->children,
@@ -845,7 +913,7 @@ private:
                                 stack[level]->internal_bitmap.total()};
 
             if (vec.size() < 2) {
-                std::free(stack[level]->children);
+                alloc_.dealloc(stack[level]->children);
                 stack[level]->children = nullptr;
                 stack[level]->external_bitmap = {};
             } else {
@@ -858,6 +926,7 @@ private:
     }
 
 private:
+    Alloc alloc_;
     detail::Node root_;
     size_t size_{0};
 };

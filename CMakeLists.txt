@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.26.4)
 
 project(everload_trie VERSION 0.1)
 
+option(${PROJECT_NAME}_TESTS "Enable tests" OFF)
+option(${PROJECT_NAME}_CONTRACT_CHECKS "Enable contract checks; if disabled, violating contracts produce UB" OFF)
+
 # if inside subdirectory of another project
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     set(${PROJECT_NAME}_sub OFF)
@@ -11,6 +14,9 @@ endif()
 
 add_library(everload_trie INTERFACE include/everload_trie/trie.h)
 target_include_directories(everload_trie INTERFACE include)
+if(${PROJECT_NAME}_CONTRACT_CHECKS)
+    target_compile_definitions(everload_trie INTERFACE EVERLOAD_TRIE_CONTRACT_CHECKS)
+endif()
 
 function(set_target_build_settings target)
     if(NOT TARGET ${target})
@@ -51,7 +57,18 @@ function(set_target_build_settings target)
     target_link_options(${target} PRIVATE ${link_options})
 endfunction()
 
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+if(${PROJECT_NAME}_TESTS)
+    enable_testing()
+    if(NOT ${PROJECT_NAME}_sub)
+        find_package(Catch2 REQUIRED QUIET)
+    endif()
+    add_executable(test_${PROJECT_NAME} test/trie.cpp)
+    target_link_libraries(test_${PROJECT_NAME} Catch2::Catch2WithMain ${PROJECT_NAME})
+    set_target_build_settings(test_${PROJECT_NAME})
+    add_test(test_${PROJECT_NAME} test_${PROJECT_NAME})
+endif()
+
+if(${PROJECT_NAME}_TESTS AND CMAKE_BUILD_TYPE STREQUAL "Debug")
     set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_CLEAN_FILES ${CMAKE_BINARY_DIR}/dcov)
     add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/cov.sh
         COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/scripts/cov.sh ${CMAKE_BINARY_DIR}
@@ -64,16 +81,4 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         COMMAND ./cov.sh
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     )
-endif()
-
-option(${PROJECT_NAME}_TESTING "Enable testing" OFF)
-if(${PROJECT_NAME}_TESTING)
-    enable_testing()
-    if(NOT ${PROJECT_NAME}_sub)
-        find_package(Catch2 REQUIRED QUIET)
-    endif()
-    add_executable(test_${PROJECT_NAME} test/trie.cpp)
-    target_link_libraries(test_${PROJECT_NAME} Catch2::Catch2WithMain ${PROJECT_NAME})
-    set_target_build_settings(test_${PROJECT_NAME})
-    add_test(test_${PROJECT_NAME} test_${PROJECT_NAME})
 endif()
