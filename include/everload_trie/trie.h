@@ -471,11 +471,15 @@ private:
     std::span<ErasedNode> inner;
 };
 
-/// Stack with value type `Node` and with preallocated memory to to hold 32 `Node`s
-/// It can recycle memory to hold more `Node`s.
-/// \note During trie destruction this stack is used to traverse the trie in DFS order.
-/// The algorithm recycles `NodeVec`s as it goes. One can mathematically prove that this
-/// stack won't go out of memory in the algorithm.
+/// Stack of `Node`s
+///
+/// The stack has preallocated memory to to hold 32 `Node`s. It can recycle
+/// memory to hold more `Node`s.
+///
+/// \note During trie destruction this stack is used to traverse the trie
+/// without allocating additional memory but rather reusing the memory being
+/// freed during the destruction. One can mathematically prove that this stack
+/// won't go out of memory in the algorithm.
 class RecyclingStack {
 public:
     void recycle(std::span<ErasedNode> nodes) noexcept {
