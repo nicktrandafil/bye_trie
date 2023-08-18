@@ -276,6 +276,10 @@ public:
         return len_;
     }
 
+    T bits() const noexcept {
+        return bits_;
+    }
+
     uint8_t value() const noexcept {
         return take_slice(bits_, start_, len_);
     }
@@ -601,6 +605,62 @@ concept Allocator = std::is_nothrow_move_constructible_v<T>
                         { alloc.dealloc(nullptr) };
                         noexcept(alloc.dealloc(nullptr));
                     };
+
+template <UnsignedIntegral P, TrivialLittleObject T>
+class Iterator {
+public:
+    using iterator_category = std::input_iterator_tag;
+    using value_type = struct {
+        P bits;
+        uint8_t len;
+        T value;
+    };
+    using difference_type = std::ptrdiff_t;
+    using pointer = value_type const*;
+    using reference = value_type;
+
+    reference operator*() const noexcept {
+        assert(!states.empty());
+        auto const& state = states.back();
+        assert(state.idx < (1 << detail::stride) - 1);
+
+        uint8_t vec_idx;
+        if (!state.internal_bitmap.exists(
+                    vec_idx, state.prefix.value(), state.prefix.len())) {
+            assert(false);
+        }
+
+        return {
+                state.prefix.bits(),
+                state.prefix.offset() + state.prefix.len(),
+                std::bit_cast<T>(
+                        detail::NodeVec{states.back().node.children,
+                                        states.back().node.external_bitmap.total(),
+                                        vec_idx + 1}
+                                .values()[vec_idx]),
+        };
+    }
+
+    Iterator& operator++() noexcept(false) {
+        assert(!states.empty());
+        auto& state = states.back();
+        assert(state.idx < (1 << detail::stride) - 1);
+    }
+
+private:
+    //                     0|0000000000000000|00000000|0000|00|0
+    // slice len                            4        3    2  1 0
+    // bitmap len or count                 16        8    4  2 1
+    // accumulated count                   31       15    7  3 1
+    struct State {
+        detail::Node node;
+        detail::BitsSlice<P> prefix;
+        uint8_t idx;
+        uint8_t len;
+    };
+
+    std::vector<State> states;
+};
 
 template <UnsignedIntegral P, TrivialLittleObject T, Allocator Alloc = SystemAllocator>
 class Trie {
