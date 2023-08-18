@@ -602,48 +602,9 @@ concept Allocator = std::is_nothrow_move_constructible_v<T>
                         noexcept(alloc.dealloc(nullptr));
                     };
 
-template <class T>
-concept ContractViolationHandler = requires(T) {
-    { T::handle() };
-};
-
-#ifdef EVERLOAD_TRIE_CONTRACT_CHECKS
-#define EVERLOAD_TRIE_ASSERT(cond, handler)                                              \
-    if (!(cond)) {                                                                       \
-        handler::handle();                                                               \
-    }                                                                                    \
-    static_assert(true)
-#else
-#define EVERLOAD_TRIE_ASSERT(...) static_assert(true)
-#endif
-
-struct Aborter {
-    [[noreturn]] static void handle() noexcept {
-        std::abort();
-    }
-};
-
-template <UnsignedIntegral P, ContractViolationHandler H = Aborter>
-class BitsPrefix {
-public:
-    constexpr BitsPrefix(P bits, uint8_t start, uint8_t len) noexcept
-            : inner(bits, start, len) {
-        EVERLOAD_TRIE_ASSERT(start < sizeof(P) * CHAR_BIT, H);
-        EVERLOAD_TRIE_ASSERT(len <= sizeof(P) * CHAR_BIT - start, H);
-    }
-
-    /*implicit*/ operator detail::BitsSlice<P>&() noexcept {
-        return inner;
-    }
-
-private:
-    detail::BitsSlice<P> inner;
-};
-
-template <UnsignedIntegral P, TrivialLittleObject T,
-          Allocator Alloc = SystemAllocator>
+template <UnsignedIntegral P, TrivialLittleObject T, Allocator Alloc = SystemAllocator>
 class Trie {
-  public:
+public:
     explicit Trie() noexcept(noexcept(Alloc{}))
             : alloc_{}
             , root_{detail::InternalBitMap{0}, detail::ExternalBitMap{0}, nullptr} {
@@ -673,11 +634,15 @@ class Trie {
     }
 
     /// Insert only if the exact prefix is not present
+    /// \pre `len <= sizeof(P) * CHAR_BITS`
     /// \post Strong exception guarantee
     /// \return Existing value
     /// \throw Forwards `Alloc::realloc` exception
-    std::optional<T> insert(BitsPrefix<P> prefix, T value) noexcept(noexcept(alloc_.realloc(nullptr, 0))) {
+    std::optional<T> insert(P bits,
+                            uint8_t len,
+                            T value) noexcept(noexcept(alloc_.realloc(nullptr, 0))) {
         detail::Node* node = &root_;
+        detail::BitsSlice<P> prefix{bits, 0, len};
         find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
         auto const prev = match_exact_or_insert(node, prefix, value);
@@ -685,13 +650,15 @@ class Trie {
     }
 
     /// Replace or insert if the exact prefix is not present
+    /// \pre `len <= sizeof(P) * CHAR_BITS`
     /// \post Strong exception guarantee
     /// \return Previous value
     /// \throw Forwards `Alloc::realloc` exception
-    std::optional<T>
-    replace(BitsPrefix<P> prefix,
-            T value) noexcept(noexcept(alloc_.realloc(nullptr, 0))) {
+    std::optional<T> replace(P bits,
+                             uint8_t len,
+                             T value) noexcept(noexcept(alloc_.realloc(nullptr, 0))) {
         detail::Node* node = &root_;
+        detail::BitsSlice<P> prefix{bits, 0, len};
         find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
         if (auto const old_value = match_exact_or_insert(node, prefix, value)) {
@@ -705,7 +672,7 @@ class Trie {
     }
 
     /// Match exact prefix
-    /// \pre len <= sizeof(P) * CHAR_BIT
+    /// \pre `len <= sizeof(P) * CHAR_BIT`
     std::optional<T> match_exact(P bits, uint8_t len) noexcept {
         assert(len <= sizeof(P) * CHAR_BIT);
 
@@ -730,9 +697,8 @@ class Trie {
     }
 
     /// Match longest prefix
-    /// \pre len <= sizeof(P) * CHAR_BIT
-    std::optional<std::pair<uint8_t, T>> match_longest(P bits,
-                                                       uint8_t len) noexcept {
+    /// \pre `len <= sizeof(P) * CHAR_BIT`
+    std::optional<std::pair<uint8_t, T>> match_longest(P bits, uint8_t len) noexcept {
         assert(len <= sizeof(P) * CHAR_BIT);
         detail::Node* node = &root_;
         detail::BitsSlice<P> prefix{bits, 0, len};
@@ -765,7 +731,7 @@ class Trie {
     }
 
     /// Erase exact prefix
-    /// \pre len <= sizeof(P) * CHAR_BIT
+    /// \pre `len <= sizeof(P) * CHAR_BIT`
     bool erase_exact(P bits, uint8_t len) noexcept {
         detail::Node* node = &root_;
         detail::BitsSlice<P> prefix{bits, 0, len};
@@ -804,7 +770,7 @@ class Trie {
     ~Trie() noexcept {
         detail::RecyclingStack stack;
         stack.push(root_);
-        while (!stack.empty()) { // dfs traversal
+        while (!stack.empty()) { // DFS traversal
             auto const node = stack.pop();
             detail::NodeVec vec{node.children,
                                 node.external_bitmap.total(),

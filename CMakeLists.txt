@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 3.26.4)
 project(everload_trie VERSION 0.1)
 
 option(${PROJECT_NAME}_TESTS "Enable tests" OFF)
-option(${PROJECT_NAME}_CONTRACT_CHECKS "Enable contract checks; if disabled, violating contracts produce UB" OFF)
 
 # if inside subdirectory of another project
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
@@ -14,9 +13,6 @@ endif()
 
 add_library(everload_trie INTERFACE include/everload_trie/trie.h)
 target_include_directories(everload_trie INTERFACE include)
-if(${PROJECT_NAME}_CONTRACT_CHECKS)
-    target_compile_definitions(everload_trie INTERFACE EVERLOAD_TRIE_CONTRACT_CHECKS)
-endif()
 
 function(set_target_build_settings target)
     if(NOT TARGET ${target})
