@@ -28,6 +28,12 @@
 
 using namespace everload_trie;
 
+TEST_CASE("", "[BitsSlice][concatenated]") {
+    detail::BitsSlice<uint32_t> slice(0b1100'1010, 4, 4);
+    REQUIRE(slice.concatenated(0, 0).value() == 0b1100);
+    REQUIRE(static_cast<unsigned>(slice.concatenated(1, 1).value()) == 0b11100);
+}
+
 TEST_CASE("", "[ExternalBitMap][exists][before]") {
     detail::ExternalBitMap bitmap(0b110);
     REQUIRE(!bitmap.exists(0));
@@ -323,6 +329,12 @@ TEST_CASE("Insert values", "[Trie][insert]") {
                 }
             }
         }
+    }
+
+    SECTION("Longest") {
+        everload_trie::Trie<uint32_t, long> trie;
+        REQUIRE(trie.insert(0xffffffff, 32, 0) == std::nullopt);
+        REQUIRE(trie.match_exact(0xffffffff, 32) == 0);
     }
 }
 

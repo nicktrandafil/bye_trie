@@ -242,21 +242,17 @@ union ErasedNode {
 };
 
 constexpr inline uint8_t take_slice(uint32_t value, uint8_t start, uint8_t len) noexcept {
-    assert(start <= 32);
-    assert(len < 32);
-    static_assert(stride < 32);
-    return (start == 32)
-                 ? 0
-                 : static_cast<uint8_t>((value >> start) & ((uint32_t(1) << len) - 1));
+    assert(start < 32);
+    assert(start + len <= 32);
+    return (len == 32) ? (value >> start)
+                       : ((value >> start) & ((uint32_t(1) << len) - 1));
 }
 
 constexpr inline uint8_t take_slice(uint64_t value, uint8_t start, uint8_t len) noexcept {
-    assert(start <= 64);
-    assert(len < 64);
-    static_assert(stride < 64);
-    return (start == 64)
-                 ? 0
-                 : static_cast<uint8_t>((value >> start) & ((uint64_t(1) << len) - 1));
+    assert(start < 64);
+    assert(start + len <= 64);
+    return (len == 64) ? (value >> start)
+                       : ((value >> start) & ((uint64_t(1) << len) - 1));
 }
 
 template <class T>
@@ -266,6 +262,8 @@ public:
             : bits_(bits)
             , start_(start)
             , len_(len) {
+        assert(start < sizeof(T) * CHAR_BIT);
+        assert(start + len <= sizeof(T) * CHAR_BIT);
     }
 
     uint8_t offset() const noexcept {
@@ -285,7 +283,7 @@ public:
     }
 
     BitsSlice sub(size_t start) const noexcept {
-        assert(start <= len_);
+        assert(start < len_);
         BitsSlice ret{*this};
         ret.start_ += start;
         ret.len_ -= start;
@@ -293,12 +291,20 @@ public:
     }
 
     BitsSlice sub(unsigned start, unsigned len) const noexcept {
-        assert(len <= len_);
-        assert(start <= len_);
+        assert(start < len_);
+        assert(start + len <= len_);
         BitsSlice ret{*this};
         ret.start_ += start;
         ret.len_ = len;
         return ret;
+    }
+
+    BitsSlice concatenated(T bits, uint8_t len) const noexcept {
+        assert(start_ + len_ != sizeof(T) * CHAR_BIT);
+        assert(static_cast<uint8_t>(start_ + len_ + len) <= sizeof(T) * CHAR_BIT);
+        return BitsSlice{bits_ | (bits << (start_ + len_)),
+                         start_,
+                         static_cast<uint8_t>(len_ + len)};
     }
 
 private:
@@ -620,31 +626,18 @@ public:
     using reference = value_type;
 
     reference operator*() const noexcept {
-        assert(!states.empty());
-        auto const& state = states.back();
-        assert(state.idx < (1 << detail::stride) - 1);
-
-        uint8_t vec_idx;
-        if (!state.internal_bitmap.exists(
-                    vec_idx, state.prefix.value(), state.prefix.len())) {
-            assert(false);
-        }
-
         return {
-                state.prefix.bits(),
-                state.prefix.offset() + state.prefix.len(),
+                prefix.bits(),
+                prefix.len(),
                 std::bit_cast<T>(
                         detail::NodeVec{states.back().node.children,
                                         states.back().node.external_bitmap.total(),
-                                        vec_idx + 1}
-                                .values()[vec_idx]),
+                                        count + 1}
+                                .values()[count]),
         };
     }
 
     Iterator& operator++() noexcept(false) {
-        assert(!states.empty());
-        auto& state = states.back();
-        assert(state.idx < (1 << detail::stride) - 1);
     }
 
 private:
@@ -655,10 +648,14 @@ private:
     struct State {
         detail::Node node;
         detail::BitsSlice<P> prefix;
-        uint8_t idx;
-        uint8_t len;
     };
 
+    detail::Node node;
+    detail::BitsSlice<P> prefix;
+    uint8_t bitmap;
+    uint8_t idx;
+    uint8_t len;
+    uint8_t count;
     std::vector<State> states;
 };
 
