@@ -30,8 +30,8 @@ using namespace everload_trie;
 
 TEST_CASE("", "[BitsSlice][concatenated]") {
     detail::BitsSlice<uint32_t> slice(0b1100'1010, 4, 4);
-    REQUIRE(slice.concatenated(0, 0).value() == 0b1100);
-    REQUIRE(static_cast<unsigned>(slice.concatenated(1, 1).value()) == 0b11100);
+    REQUIRE(slice.concatenated({0, 0, 0}).value() == 0b1100);
+    REQUIRE(static_cast<unsigned>(slice.concatenated({1, 0, 1}).value()) == 0b11100);
 }
 
 TEST_CASE("", "[ExternalBitMap][exists][before]") {
@@ -543,4 +543,12 @@ TEST_CASE("Exception guarantee", "[Trie][insert]") {
             trie.insert(i << 5, 27, 0);
         }
     }
+}
+
+TEST_CASE("Iteration", "[Trie]") {
+    using Trie = Trie<uint32_t, long>;
+    Trie trie;
+    trie.insert(0, 0, 1);
+    using Iter = decltype(trie.begin());
+    REQUIRE((*trie.begin() == Iter::value_type{0, 0, 1}));
 }
