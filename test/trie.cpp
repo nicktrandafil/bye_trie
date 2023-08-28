@@ -28,10 +28,10 @@
 
 using namespace everload_trie;
 
-TEST_CASE("", "[BitsSlice][concatenated]") {
-    detail::BitsSlice<uint32_t> slice(0b1100'1010, 4, 4);
-    REQUIRE(slice.concatenated({0, 0, 0}).value() == 0b1100);
-    REQUIRE(static_cast<unsigned>(slice.concatenated({1, 0, 1}).value()) == 0b11100);
+TEST_CASE("", "[Bits][concatenated]") {
+    detail::Bits<uint32_t> slice(0b1100, 4);
+    REQUIRE(slice.concatenated({0, 0}).value() == 0b1100);
+    REQUIRE(static_cast<unsigned>(slice.concatenated({1, 1}).value()) == 0b11100);
 }
 
 TEST_CASE("", "[ExternalBitMap][exists][before]") {
@@ -548,7 +548,16 @@ TEST_CASE("Exception guarantee", "[Trie][insert]") {
 TEST_CASE("Iteration", "[Trie]") {
     using Trie = Trie<uint32_t, long>;
     Trie trie;
-    trie.insert(0, 0, 1);
-    using Iter = decltype(trie.begin());
-    REQUIRE((*trie.begin() == Iter::value_type{0, 0, 1}));
+
+    SECTION("0/0 exists, begin() doesn't seek the first prefix") {
+        trie.insert(0, 0, 1);
+        using Iter = decltype(trie.begin());
+        REQUIRE((*trie.begin() == Iter::value_type{0, 0, 1}));
+    }
+
+    SECTION("0/0 doesn't exist, begin() seeks the first prefix") {
+        trie.insert(0, 1, 1);
+        using Iter = decltype(trie.begin());
+        REQUIRE((*trie.begin() == Iter::value_type{0, 1, 1}));
+    }
 }

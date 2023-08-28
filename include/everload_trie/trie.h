@@ -46,6 +46,86 @@ namespace detail {
 inline constexpr uint8_t stride = 5;     // bits
 inline constexpr uint8_t stride_m_1 = 4; // bits
 
+constexpr inline uint32_t take_slice(uint32_t value,
+                                     uint8_t start,
+                                     uint8_t len) noexcept {
+    assert(start < 32);
+    assert(start + len <= 32);
+    return (len == 32) ? (value >> start)
+                       : ((value >> start) & ((uint32_t(1) << len) - 1));
+}
+
+constexpr inline uint64_t take_slice(uint64_t value,
+                                     uint8_t start,
+                                     uint8_t len) noexcept {
+    assert(start < 64);
+    assert(start + len <= 64);
+    return (len == 64) ? (value >> start)
+                       : ((value >> start) & ((uint64_t(1) << len) - 1));
+}
+
+template <class T>
+class Bits {
+public:
+    Bits()
+            : bits_{}
+            , len_{} {
+    }
+
+    constexpr Bits(T bits, uint8_t len) noexcept
+            : bits_(bits)
+            , len_(len) {
+        assert(len <= sizeof(T) * CHAR_BIT);
+    }
+
+    uint8_t len() const noexcept {
+        return len_;
+    }
+
+    T bits() const noexcept {
+        return bits_;
+    }
+
+    uint8_t value() const noexcept {
+        return take_slice(bits_, 0, len_);
+    }
+
+    Bits sub(uint8_t offset) const noexcept {
+        return Bits{take_slice(bits_, offset, len_ - offset),
+                    static_cast<uint8_t>(len_ - offset)};
+    }
+
+    Bits sub(uint8_t offset, uint8_t len) const noexcept {
+        assert(offset + len <= len_);
+        return Bits{take_slice(bits_, offset, len), len};
+    }
+
+    Bits concatenated(Bits slice) const noexcept {
+        assert(len_ != sizeof(T) * CHAR_BIT);
+        assert(static_cast<uint8_t>(len_ + slice.len()) <= sizeof(T) * CHAR_BIT);
+        return Bits{bits_ | (slice.value() << len_),
+                    static_cast<uint8_t>(len_ + slice.len())};
+    }
+
+    bool operator==(Bits const& rhs) const noexcept {
+        return len_ == rhs.len_ && value() == rhs.value();
+    }
+
+    Bits& operator++() noexcept {
+        if (value() == ((1 << len_) - 1)) {
+            bits_ = 0;
+            ++len_;
+        } else {
+            ++bits_;
+        }
+        return *this;
+    }
+
+private:
+    T bits_;
+    uint8_t len_;
+};
+
 // 0|0000000000000000|00000000|0000|00|0
 //                 16        8    4  2 1
 //                          15    7  3 1
@@ -239,85 +319,6 @@ struct TwoPointers {
 union ErasedNode {
     Node node;
     TwoPointers pointers;
-};
-
-constexpr inline uint32_t take_slice(uint32_t value,
-                                     uint8_t start,
-                                     uint8_t len) noexcept {
-    assert(start < 32);
-    assert(start + len <= 32);
-    return (len == 32) ? (value >> start)
-                       : ((value >> start) & ((uint32_t(1) << len) - 1));
-}
-
-constexpr inline uint64_t take_slice(uint64_t value,
-                                     uint8_t start,
-                                     uint8_t len) noexcept {
-    assert(start < 64);
-    assert(start + len <= 64);
-    return (len == 64) ? (value >> start)
-                       : ((value >> start) & ((uint64_t(1) << len) - 1));
-}
-
-template <class T>
-class BitsSlice {
-public:
-    BitsSlice()
-            : bits_{}
-            , start_{}
-            , len_{} {
-    }
-
-    constexpr BitsSlice(T bits, uint8_t start, uint8_t len) noexcept
-            : bits_(bits)
-            , start_(start)
-            , len_(len) {
-        assert(start + len <= sizeof(T) * CHAR_BIT);
-    }
-
-    uint8_t offset() const noexcept {
-        return start_;
-    }
-
-    uint8_t len() const noexcept {
-        return len_;
-    }
-
-    T bits() const noexcept {
-        return bits_;
-    }
-
-    uint8_t value() const noexcept {
-        return take_slice(bits_, start_, len_);
-    }
-
-    BitsSlice sub(size_t start) const noexcept {
-        BitsSlice ret{*this};
-        ret.start_ += start;
-        ret.len_ -= start;
-        return ret;
-    }
-
-    BitsSlice sub(unsigned start, unsigned len) const noexcept {
-        assert(start + len <= len_);
-        BitsSlice ret{*this};
-        ret.start_ += start;
-        ret.len_ = len;
-        return ret;
-    }
-
-    BitsSlice concatenated(BitsSlice slice) const noexcept {
-        assert(start_ + len_ != sizeof(T) * CHAR_BIT);
-        assert(static_cast<uint8_t>(start_ + len_ + slice.len()) <= sizeof(T) * CHAR_BIT);
-        return BitsSlice{bits_ | (slice.value() << (start_ + len_)),
-                         start_,
-                         static_cast<uint8_t>(len_ + slice.len())};
-    }
-
-private:
-    T bits_;
-    uint8_t start_;
-    uint8_t len_;
 };
 
 template <class T>
@@ -582,7 +583,7 @@ private:
 };
 
 template <class T>
-BitsSlice<T> leaf_slice(BitsSlice<T> prefix) noexcept {
+Bits<T> leaf(Bits<T> prefix) noexcept {
     return prefix.sub(prefix.len() - prefix.len() % detail::stride,
                       prefix.len() % detail::stride);
 }
@@ -590,15 +591,15 @@ BitsSlice<T> leaf_slice(BitsSlice<T> prefix) noexcept {
 } // namespace detail
 
 template <class T>
-concept UnsignedIntegral =
-        std::unsigned_integral<T> || (std::is_trivial_v<T> && requires(T val) {
-            { val << 1 };
-            { val >> 1 };
-            { val& val };
-            { val - val };
-            { val == val };
-            { static_cast<uint64_t>(val) };
-        });
+concept UnsignedIntegral = std::unsigned_integral<T>
+                        || (sizeof(T) <= 16 && std::is_trivial_v<T> && requires(T val) {
+                               { val << 1 };
+                               { val >> 1 };
+                               { val& val };
+                               { val - val };
+                               { val == val };
+                               { static_cast<uint64_t>(val) };
+                           });
 
 template <class T>
 concept TrivialLittleObject = std::is_trivial_v<T> && sizeof(T) == 8;
@@ -641,9 +642,9 @@ public:
     using reference = value_type;
 
     reference operator*() const noexcept {
-        auto const slice = leaf_slice(prefix);
+        auto const prefix = this->prefix.concatenated(current_slice);
         uint8_t idx;
-        static_cast<void>(node.internal_bitmap.exists(idx, slice.value(), slice.len()));
+        node.internal_bitmap.exists(idx, current_slice.value(), current_slice.len());
         return {prefix.bits(),
                 prefix.len(),
                 std::bit_cast<T>(detail::NodeVec{node.children,
@@ -653,29 +654,79 @@ public:
     }
 
     Iterator& operator++() noexcept(false) {
+        assert(!is_end());
+        current_slice = next_slice;
+
+        while (next_slice != detail::Bits{0xff, detail::stride_m_1}) {
+            ++next_slice;
+            uint8_t idx;
+            if (node.internal_bitmap.exists(idx, next_slice.value(), next_slice.len())) {
+                return *this;
+            }
+        }
+
+        while (!states.empty()) {
+            node = states.front().node;
+            prefix = states.front().prefix;
+            current_slice = {0, 0};
+            next_slice = {0, 0};
+
+            auto const branches =
+                    detail::NodeVec{node.children, node.external_bitmap.total(), 0}
+                            .branches();
+            states.reserve(states.size() + branches.size());
+            uint8_t idx = 0;
+            while (idx < 32) {
+                if (node.external_bitmap.exists(idx)) {
+                    states.emplace_back(branches[node.external_bitmap.before(idx)].node,
+                                        prefix.concatenated({idx, detail::stride}));
+                }
+            }
+
+            while (next_slice != detail::Bits{0xff, detail::stride_m_1}) {
+                ++next_slice;
+                uint8_t idx;
+                if (node.internal_bitmap.exists(
+                            idx, next_slice.value(), next_slice.len())) {
+                    return ++(*this);
+                }
+            }
+        }
+
         return *this;
     }
 
 private:
+    bool is_end() const noexcept {
+        return current_slice == next_slice
+            && current_slice == detail::Bits{0xff, detail::stride_m_1};
+    }
+
     template <UnsignedIntegral, TrivialLittleObject, Allocator Alloc>
     friend class Trie;
 
-    explicit Iterator(detail::Node node, detail::BitsSlice<P> prefix) noexcept(false)
+    explicit Iterator(detail::Node node, detail::Bits<P> prefix) noexcept(false)
             : node{node}
-            , prefix{prefix}
-            , slice{leaf_slice(prefix).concatenated({0, 0, 1})} {
+            , prefix{prefix.sub(0, prefix.len() - leaf(prefix).len())}
+            , current_slice{leaf(prefix)}
+            , next_slice{leaf(prefix).concatenated({0, 1})} {
         auto const branches =
                 detail::NodeVec{node.children, node.external_bitmap.total(), 0}
-                        .branches()
-                        .subspan(node.external_bitmap.before(slice.value()));
-        auto const n = states.size();
-        states.resize(n + branches.size());
-        std::transform(branches.begin(),
-                       branches.end(),
-                       states.begin() + n,
-                       [prefix](auto const x) {
-                           return State{x.node, prefix};
-                       });
+                        .branches();
+        states.reserve(states.size() + branches.size());
+        auto idx = next_slice.value();
+        while (idx < 32) {
+            if (node.external_bitmap.exists(idx)) {
+                states.emplace_back(branches[node.external_bitmap.before(idx)].node,
+                                    this->prefix.concatenated({idx, detail::stride}));
+            }
+            ++idx;
+        }
+    }
+
+    Iterator()
+            : current_slice{0xff, detail::stride_m_1}
+            , next_slice{0xff, detail::stride_m_1} {
     }
 
     //                     0|0000000000000000|00000000|0000|00|0
@@ -684,12 +735,13 @@ private:
     // accumulated count                   31       15    7  3 1
     struct State {
         detail::Node node;
-        detail::BitsSlice<P> prefix;
+        detail::Bits<P> prefix;
     };
 
     detail::Node node;
-    detail::BitsSlice<P> prefix;
-    detail::BitsSlice<P> slice;
+    detail::Bits<P> prefix;
+    detail::Bits<P> current_slice;
+    detail::Bits<P> next_slice;
     std::vector<State> states;
 };
 
@@ -733,7 +785,7 @@ public:
                             uint8_t len,
                             T value) noexcept(noexcept(alloc_.realloc(nullptr, 0))) {
         detail::Node* node = &root_;
-        detail::BitsSlice<P> prefix{bits, 0, len};
+        detail::Bits<P> prefix{bits, len};
         find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
         auto const prev = match_exact_or_insert(node, prefix, value);
@@ -749,7 +801,7 @@ public:
                              uint8_t len,
                              T value) noexcept(noexcept(alloc_.realloc(nullptr, 0))) {
         detail::Node* node = &root_;
-        detail::BitsSlice<P> prefix{bits, 0, len};
+        detail::Bits<P> prefix{bits, len};
         find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
         if (auto const old_value = match_exact_or_insert(node, prefix, value)) {
@@ -768,7 +820,7 @@ public:
         assert(len <= sizeof(P) * CHAR_BIT);
 
         detail::Node* node = &root_;
-        detail::BitsSlice<P> prefix{bits, 0, len};
+        detail::Bits<P> prefix{bits, len};
 
         find_leaf_branch(node, prefix, noop);
         if (prefix.len() > detail::stride_m_1) {
@@ -792,17 +844,17 @@ public:
     std::optional<std::pair<uint8_t, T>> match_longest(P bits, uint8_t len) noexcept {
         assert(len <= sizeof(P) * CHAR_BIT);
         detail::Node* node = &root_;
-        detail::BitsSlice<P> prefix{bits, 0, len};
+        detail::Bits<P> prefix{bits, len};
 
         std::optional<std::pair<uint8_t, T>> longest;
-        auto const update_longest = [&longest](auto node, auto prefix) {
-            auto const slice = prefix.sub(0, std::min(detail::stride_m_1, prefix.len()));
+        uint8_t offset = 0;
+        auto const update_longest = [&longest, &offset](auto node, auto slice) {
             auto const idx = slice.value();
             uint8_t vec_idx;
             if (auto const len =
                         node.internal_bitmap.find_longest(vec_idx, idx, slice.len())) {
                 longest = std::pair{
-                        static_cast<uint8_t>(slice.offset() + len.value()),
+                        static_cast<uint8_t>(offset + len.value()),
                         std::bit_cast<T>(
                                 detail::NodeVec{node.children,
                                                 node.external_bitmap.total(),
@@ -810,10 +862,10 @@ public:
                                         .value(vec_idx)),
                 };
             }
+            offset += detail::stride;
         };
 
         find_leaf_branch(node, prefix, update_longest);
-
         if (prefix.len() < detail::stride) {
             update_longest(*node, prefix);
         }
@@ -825,7 +877,7 @@ public:
     /// \pre `len <= sizeof(P) * CHAR_BIT`
     bool erase_exact(P bits, uint8_t len) noexcept {
         detail::Node* node = &root_;
-        detail::BitsSlice<P> prefix{bits, 0, len};
+        detail::Bits<P> prefix{bits, len};
 
         find_leaf_branch(node, prefix, noop);
         if (prefix.len() > detail::stride_m_1) {
@@ -881,18 +933,22 @@ public:
         return alloc_;
     }
 
-    Iterator<P, T> begin() noexcept(false) {
-        return Iterator<P, T>{root_, detail::BitsSlice<P>{0, 0, 0}};
+    Iterator<P, T> begin() const noexcept(false) {
+        return Iterator<P, T>{root_, detail::Bits<P>{0, 0}};
+    }
+
+    Iterator<P, T> end() const noexcept(false) {
+        return Iterator<P, T>{};
     }
 
 private:
     static constexpr auto noop = [](auto...) {};
 
     static void find_leaf_branch(detail::Node*& node,
-                                 detail::BitsSlice<P>& prefix,
+                                 detail::Bits<P>& prefix,
                                  auto on_node) noexcept {
         while (prefix.len() >= detail::stride) {
-            on_node(*node, prefix);
+            on_node(*node, prefix.sub(0, detail::stride_m_1));
             auto const idx = prefix.sub(0, detail::stride).value();
             if (node->external_bitmap.exists(idx)) {
                 auto const vec_idx = node->external_bitmap.before(idx);
@@ -906,8 +962,9 @@ private:
 
     /// \post Strong exception guarantee
     /// \throw Forwards `Alloc::realloc` exception
-    void extend_leaf(detail::Node*& node, detail::BitsSlice<P>& prefix) noexcept(
-            noexcept(alloc_.realloc(nullptr, 0))) {
+    void extend_leaf(detail::Node*& node,
+                     detail::Bits<P>& prefix) noexcept(noexcept(alloc_.realloc(nullptr,
+                                                                               0))) {
         while (prefix.len() >= detail::stride) {
             auto const idx = prefix.sub(0, detail::stride).value();
             auto const vec_idx = node->external_bitmap.before(idx);
@@ -926,7 +983,7 @@ private:
     /// \post Strong exception guarantee
     /// \throw Forwards `Alloc::realloc` exception
     void** match_exact_or_insert(detail::Node*& node,
-                                 detail::BitsSlice<P> slice,
+                                 detail::Bits<P> slice,
                                  T value) noexcept(noexcept(alloc_.realloc(nullptr, 0))) {
         detail::NodeVec vec{
                 node->children,
@@ -958,7 +1015,7 @@ private:
                 stack;
 
         detail::Node* node = &root_;
-        detail::BitsSlice<P> prefix{bits, 0, len};
+        detail::Bits<P> prefix{bits, len};
 
         size_t level = 0;
         find_leaf_branch(node, prefix, [&level, &stack](auto& node, auto) {
@@ -970,7 +1027,7 @@ private:
         node->internal_bitmap = {};
         size_ -= 1;
 
-        prefix = detail::BitsSlice<P>{bits, 0, len};
+        prefix = detail::Bits<P>{bits, len};
         while (level--) {
             auto const slice = prefix.sub(level * detail::stride);
             detail::NodeVec vec{stack[level]->children,
