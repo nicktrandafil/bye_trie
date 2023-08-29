@@ -547,17 +547,57 @@ TEST_CASE("Exception guarantee", "[Trie][insert]") {
 
 TEST_CASE("Iteration", "[Trie]") {
     using Trie = Trie<uint32_t, long>;
+    using Value = Trie::ValueType;
     Trie trie;
 
     SECTION("0/0 exists, begin() doesn't seek the first prefix") {
         trie.insert(0, 0, 1);
-        using Iter = decltype(trie.begin());
-        REQUIRE((*trie.begin() == Iter::value_type{0, 0, 1}));
+        REQUIRE((*trie.begin() == Value{0, 0, 1}));
     }
 
     SECTION("0/0 doesn't exist, begin() seeks the first prefix") {
         trie.insert(0, 1, 1);
-        using Iter = decltype(trie.begin());
-        REQUIRE((*trie.begin() == Iter::value_type{0, 1, 1}));
+        REQUIRE((*trie.begin() == Value{0, 1, 1}));
+    }
+
+    SECTION("empty Trie, begin() == end()") {
+        REQUIRE((trie.begin() == trie.end()));
+    }
+
+    SECTION("not empty, begin() != end()") {
+        trie.insert(0, 1, 1);
+        REQUIRE((trie.begin() != trie.end()));
+    }
+
+    SECTION("increment reaches next element") {
+        trie.insert(0, 0, 1);
+        trie.insert(0, 1, 2);
+        REQUIRE((*++trie.begin() == Value{0, 1, 2}));
+    }
+
+    SECTION("safe iterator increment; see that the increment doesn't go out of bounds") {
+        REQUIRE(++ ++trie.begin() == trie.end());
+    }
+
+    SECTION("iterate within node") {
+        trie.insert(0, 1, 1);
+        trie.insert(0, 2, 2);
+        trie.insert(0, 3, 3);
+        trie.insert(0, 4, 4);
+        std::vector<Value> values;
+        for (auto const x : trie) {
+            values.push_back(x);
+        }
+        std::vector<Value> const expected{
+                Value{0, 1, 1}, Value{0, 2, 2}, Value{0, 3, 3}, Value{0, 4, 4}};
+        REQUIRE(values == expected);
+    }
+
+    SECTION("node does not have prefixes, but the next node has") {
+        trie.insert(0, 5, 1);
+        trie.insert(0, 6, 2);
+        REQUIRE((*trie.begin() == Value{0, 5, 1}));
+        REQUIRE((*++trie.begin() == Value{0, 6, 2}));
+        REQUIRE((++ ++ ++trie.begin() == trie.end()));
     }
 }
