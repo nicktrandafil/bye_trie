@@ -1134,7 +1134,6 @@ private:
                 node.children = nullptr;
                 node.external_bitmap = {};
             } else {
-                // todo there was index confusion, add a test
                 vec.erase_branch(node.external_bitmap.before(slice));
                 node.children = vec.data();
                 node.external_bitmap.unset(slice);

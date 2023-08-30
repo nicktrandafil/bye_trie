@@ -435,8 +435,16 @@ TEST_CASE("Erase values", "[Trie][erase_exact]") {
     SECTION("Unfold-cleaning just the leaf which contains the value") {
         everload_trie::Trie<uint32_t, long> trie;
         trie.insert(0b0'00000'00000, 11, 0);
-        trie.insert(      0b0'00000, 6, 1);
+        trie.insert(0b0'00000, 6, 1);
         REQUIRE(trie.erase_exact(0b0'00000'00000, 11));
+        REQUIRE(trie.size() == 1);
+        REQUIRE(*trie.match_exact(0b0'00000, 6) == 1);
+    }
+    SECTION("bug case of confusion of external bitmap index in unfold-cleaning") {
+        everload_trie::Trie<uint32_t, long> trie;
+        trie.insert(0b0'00001'00000, 11, 0);
+        trie.insert(0b0'00000, 6, 1);
+        REQUIRE(trie.erase_exact(0b0'00001'00000, 11));
         REQUIRE(trie.size() == 1);
         REQUIRE(*trie.match_exact(0b0'00000, 6) == 1);
     }
