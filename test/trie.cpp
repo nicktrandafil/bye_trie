@@ -575,8 +575,9 @@ TEST_CASE("Iteration", "[Trie]") {
         REQUIRE((*++trie.begin() == Value{0, 1, 2}));
     }
 
-    SECTION("safe iterator increment; see that the increment doesn't go out of bounds") {
-        REQUIRE(++ ++trie.begin() == trie.end());
+    SECTION("increment reaches end") {
+        trie.insert(0, 0, 1);
+        REQUIRE(++trie.begin() == trie.end());
     }
 
     SECTION("iterate within node") {
@@ -598,6 +599,79 @@ TEST_CASE("Iteration", "[Trie]") {
         trie.insert(0, 6, 2);
         REQUIRE((*trie.begin() == Value{0, 5, 1}));
         REQUIRE((*++trie.begin() == Value{0, 6, 2}));
-        REQUIRE((++ ++ ++trie.begin() == trie.end()));
+        REQUIRE((++ ++trie.begin() == trie.end()));
+    }
+
+    SECTION("iterator comparison") {
+        trie.insert(0xfffffff0, 32, 1);
+        trie.insert(0xfffffff1, 32, 2);
+        REQUIRE(++trie.begin() == ++trie.begin());
+    }
+
+    SECTION("iterate a subnet") {
+        trie.insert(0x00ffffff, 24, 1);
+        trie.insert(0x01ffffff, 32, 2);
+        trie.insert(0x03ffffff, 32, 3);
+        trie.insert(0x040fffff, 32, 4);
+        auto it = trie.find_longest(0xffffffff, 32);
+        std::vector<Value> values;
+        while (it != trie.end()) {
+            values.push_back(*it);
+            ++it;
+        }
+        std::vector<Value> const expected{Value{0x00ffffff, 24, 1},
+                                          Value{0x01ffffff, 32, 2},
+                                          Value{0x03ffffff, 32, 3}};
+        REQUIRE(values == expected);
+    }
+}
+
+TEST_CASE("Iterator interface", "[Trie][find_exact][find_longest]") {
+    using Trie = Trie<uint32_t, long>;
+    using Value = Trie::ValueType;
+    Trie trie;
+
+    SECTION("find_exact") {
+        SECTION("empty Trie, find_exact() == end()") {
+            REQUIRE((trie.find_exact(0, 0) == trie.end()));
+        }
+
+        SECTION("not empty, find_exact() != end()") {
+            trie.insert(0, 1, 1);
+            REQUIRE((trie.find_exact(0, 1) != trie.end()));
+        }
+
+        SECTION("match an element") {
+            trie.insert(0, 0, 1);
+            REQUIRE(trie.find_exact(0, 0) == trie.begin());
+            REQUIRE(*trie.find_exact(0, 0) == Value{0, 0, 1});
+        }
+
+        SECTION("don't match an element") {
+            trie.insert(0, 0, 1);
+            REQUIRE(trie.find_exact(0, 1) == trie.end());
+        }
+    }
+
+    SECTION("find_longest") {
+        SECTION("empty Trie, find_longest() == end()") {
+            REQUIRE((trie.find_longest(0, 0) == trie.end()));
+        }
+
+        SECTION("not empty, find_longest() != end()") {
+            trie.insert(0, 1, 1);
+            REQUIRE((trie.find_longest(0, 2) != trie.end()));
+        }
+
+        SECTION("find an element") {
+            trie.insert(1, 1, 1);
+            REQUIRE(trie.find_longest(1, 2) == trie.begin());
+            REQUIRE(*trie.find_longest(1, 2) == Value{1, 1, 1});
+        }
+
+        SECTION("don't find an element") {
+            trie.insert(1, 1, 1);
+            REQUIRE(trie.find_longest(0, 1) == trie.end());
+        }
     }
 }

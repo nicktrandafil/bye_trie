@@ -661,24 +661,19 @@ public:
     }
 
     Iterator& operator++() noexcept(false) {
+        ++reminder;
         do {
             // find next prefix in current node
             {
                 auto slice = fixed.concatenated(reminder);
-                if (slice != detail::Bits<P>{0, detail::stride}) {
-                    while (true) {
-                        ++reminder;
-                        slice = fixed.concatenated(reminder);
-                        if (slice == detail::Bits<P>{0, detail::stride}) {
-                            break;
-                        }
-
-                        uint8_t vec_idx;
-                        if (node.internal_bitmap.exists(
-                                    vec_idx, slice.value(), slice.len())) {
-                            return *this;
-                        }
+                while (slice.len() < detail::stride) {
+                    uint8_t vec_idx;
+                    if (node.internal_bitmap.exists(
+                                vec_idx, slice.value(), slice.len())) {
+                        return *this;
                     }
+                    ++reminder;
+                    slice = fixed.concatenated(reminder);
                 }
             }
 
@@ -691,7 +686,7 @@ public:
                         detail::NodeVec{node.children, node.external_bitmap.total(), 0}
                                 .branches();
                 states.reserve(states.size() + branches.size());
-                while (slice != detail::Bits<P>{0, detail::stride + 1}) {
+                while (slice.len() <= detail::stride) {
                     if (node.external_bitmap.exists(slice.value())) {
                         states.push_back(State{
                                 branches[node.external_bitmap.before(slice.value())].node,
@@ -707,9 +702,10 @@ public:
                 node = states.front().node;
                 prefix = states.front().prefix;
                 states.erase(states.begin());
-                fixed = reminder = detail::Bits<P>{0, 0};
+                fixed = reminder = {};
             } else {
                 node = {};
+                prefix = fixed = reminder = {};
                 break;
             }
         } while (true);
@@ -718,7 +714,8 @@ public:
     }
 
     bool operator==(Iterator const& rhs) const noexcept {
-        return prefix == rhs.prefix && fixed == rhs.fixed && reminder == rhs.reminder;
+        return prefix == rhs.prefix
+            && fixed.concatenated(reminder) == rhs.fixed.concatenated(rhs.reminder);
     }
 
 private:
@@ -756,7 +753,7 @@ private:
 template <UnsignedIntegral P, TrivialLittleObject T, Allocator Alloc = SystemAllocator>
 class Trie {
 public:
-    using ValueType = Iterator<P, T>::value_type;
+    using ValueType = typename Iterator<P, T>::value_type;
 
     explicit Trie() noexcept(noexcept(Alloc{}))
             : alloc_{}
@@ -849,6 +846,29 @@ public:
                                         .value(vec_idx));
     }
 
+    /// Counterpart of `match_exact` which returns an iterator
+    /// \pre `len <= sizeof(P) * CHAR_BIT`
+    /// \throw std::bad_alloc
+    Iterator<P, T> find_exact(P bits, uint8_t len) noexcept(false) {
+        assert(len <= sizeof(P) * CHAR_BIT);
+
+        detail::Node* node = &root_;
+        detail::Bits<P> prefix{bits, len};
+
+        find_leaf_branch(node, prefix, noop);
+        if (prefix.len() > detail::stride_m_1) {
+            return end();
+        }
+
+        auto const idx = prefix.value();
+        uint8_t vec_idx;
+        if (!node->internal_bitmap.exists(vec_idx, idx, prefix.len())) {
+            return end();
+        }
+
+        return Iterator<P, T>{*node, detail::Bits<P>{bits, len}};
+    }
+
     /// Match longest prefix
     /// \pre `len <= sizeof(P) * CHAR_BIT`
     std::optional<std::pair<uint8_t, T>> match_longest(P bits, uint8_t len) noexcept {
@@ -881,6 +901,38 @@ public:
         }
 
         return longest;
+    }
+
+    /// Counterpart of `match_longest` which returns an iterator
+    /// \pre `len <= sizeof(P) * CHAR_BIT`
+    /// \throw std::bad_alloc
+    Iterator<P, T> find_longest(P bits, uint8_t len) noexcept(false) {
+        assert(len <= sizeof(P) * CHAR_BIT);
+        detail::Node* node = &root_;
+        detail::Bits<P> prefix{bits, len};
+
+        std::optional<std::pair<uint8_t, detail::Node>> longest;
+        uint8_t offset = 0;
+        auto const update_longest = [&longest, &offset](auto node, auto slice) {
+            auto const idx = slice.value();
+            uint8_t vec_idx;
+            if (auto const len =
+                        node.internal_bitmap.find_longest(vec_idx, idx, slice.len())) {
+                longest = std::pair{static_cast<uint8_t>(offset + len.value()), node};
+            }
+            offset += detail::stride;
+        };
+
+        find_leaf_branch(node, prefix, update_longest);
+        if (prefix.len() < detail::stride) {
+            update_longest(*node, prefix);
+        }
+
+        if (longest) {
+            return Iterator<P, T>{longest->second, detail::Bits<P>{bits, longest->first}};
+        } else {
+            return end();
+        }
     }
 
     /// Erase exact prefix
