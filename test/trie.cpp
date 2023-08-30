@@ -451,6 +451,14 @@ TEST_CASE("Erase values", "[Trie][erase_exact]") {
         REQUIRE(trie.erase_exact(0b0001, 4));
         REQUIRE(trie.size() == 0);
     }
+    SECTION("node vec index is not equal to stride_m_1") {
+        everload_trie::Trie<uint32_t, long> trie;
+        trie.insert(1, 2, 0);
+        trie.insert(2, 2, 1);
+        trie.erase_exact(2, 2);
+        REQUIRE(trie.size() == 1);
+        REQUIRE(trie.match_exact(1, 2) == 0);
+    }
 }
 
 TEST_CASE("", "[RecyclingStack]") {

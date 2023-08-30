@@ -984,7 +984,6 @@ public:
 
         vec.erase_value(vec_idx);
         node->children = vec.data();
-        // todo write a test which covers the case where prefix and vec_idx differ
         node->internal_bitmap.unset(prefix);
         size_ -= 1;
         return true;
