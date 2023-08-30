@@ -169,6 +169,22 @@ private:
     Bits<uint8_t> inner;
 };
 
+class Stride {
+public:
+    template <class T>
+    /*implicit*/ Stride(Bits<T> bits) noexcept {
+        assert(bits.len() <= stride);
+        inner = {static_cast<uint8_t>(bits.bits()), bits.len()};
+    }
+
+    uint8_t value() const noexcept {
+        return inner.value();
+    }
+
+private:
+    Bits<uint8_t> inner;
+};
+
 // 0|0000000000000000|00000000|0000|00|0
 //                 16        8    4  2 1
 //                          15    7  3 1
@@ -304,28 +320,24 @@ public:
             : inner{inner} {
     }
 
-    bool exists(uint8_t i) const noexcept {
-        assert(i < 32);
-        return (inner >> i) & 1;
+    bool exists(Stride x) const noexcept {
+        return (inner >> x.value()) & 1;
     }
 
-    uint8_t before(uint8_t i) const noexcept {
-        assert(i < 32);
-        return static_cast<uint8_t>(std::popcount(((1u << i) - 1) & inner));
+    uint8_t before(Stride x) const noexcept {
+        return static_cast<uint8_t>(std::popcount(((1u << x.value()) - 1) & inner));
     }
 
     uint8_t total() const noexcept {
         return static_cast<uint8_t>(std::popcount(inner));
     }
 
-    void set(uint8_t i) {
-        assert(i < 32);
-        inner |= 1u << i;
+    void set(Stride x) {
+        inner |= 1u << x.value();
     }
 
-    void unset(uint8_t i) {
-        assert(i < 32);
-        inner &= ~(1u << i);
+    void unset(Stride x) {
+        inner &= ~(1u << x.value());
     }
 
 private:
@@ -715,10 +727,10 @@ public:
                                 .branches();
                 states.reserve(states.size() + branches.size());
                 while (slice.len() <= detail::stride) {
-                    if (node.external_bitmap.exists(slice.value())) {
-                        states.push_back(State{
-                                branches[node.external_bitmap.before(slice.value())].node,
-                                prefix.concatenated(slice)});
+                    if (node.external_bitmap.exists(slice)) {
+                        states.push_back(
+                                State{branches[node.external_bitmap.before(slice)].node,
+                                      prefix.concatenated(slice)});
                     }
                     ++reminder;
                     slice = fixed.concatenated(reminder);
@@ -1032,9 +1044,9 @@ private:
                                  auto on_node) noexcept {
         while (prefix.len() >= detail::stride) {
             on_node(*node, prefix.sub(0, detail::stride_m_1));
-            auto const idx = prefix.sub(0, detail::stride).value();
-            if (node->external_bitmap.exists(idx)) {
-                auto const vec_idx = node->external_bitmap.before(idx);
+            auto const slice = prefix.sub(0, detail::stride);
+            if (node->external_bitmap.exists(slice)) {
+                auto const vec_idx = node->external_bitmap.before(slice);
                 node = &node->children[vec_idx].node;
             } else {
                 break;
@@ -1049,14 +1061,14 @@ private:
                      detail::Bits<P>& prefix) noexcept(noexcept(alloc_.realloc(nullptr,
                                                                                0))) {
         while (prefix.len() >= detail::stride) {
-            auto const idx = prefix.sub(0, detail::stride).value();
-            auto const vec_idx = node->external_bitmap.before(idx);
+            auto const slice = prefix.sub(0, detail::stride);
+            auto const vec_idx = node->external_bitmap.before(slice);
 
             node->children = detail::NodeVec{node->children,
                                              node->external_bitmap.total(),
                                              node->internal_bitmap.total()}
                                      .insert_branch(vec_idx, detail::Node{}, alloc_);
-            node->external_bitmap.set(idx);
+            node->external_bitmap.set(slice);
 
             node = &node->children[vec_idx].node;
             prefix = prefix.sub(detail::stride);
@@ -1111,19 +1123,21 @@ private:
 
         prefix = detail::Bits<P>{bits, len};
         while (level--) {
-            auto const slice = prefix.sub(level * detail::stride);
-            detail::NodeVec vec{stack[level]->children,
-                                stack[level]->external_bitmap.total(),
-                                stack[level]->internal_bitmap.total()};
+            auto& node = *stack[level];
+            auto const slice = prefix.sub(level * detail::stride, detail::stride);
+            detail::NodeVec vec{node.children,
+                                node.external_bitmap.total(),
+                                node.internal_bitmap.total()};
 
             if (vec.size() < 2) {
                 alloc_.dealloc(stack[level]->children);
-                stack[level]->children = nullptr;
-                stack[level]->external_bitmap = {};
+                node.children = nullptr;
+                node.external_bitmap = {};
             } else {
-                vec.erase_branch(slice.value());
-                stack[level]->children = vec.data();
-                stack[level]->external_bitmap.unset(slice.value());
+                // todo there was index confusion, add a test
+                vec.erase_branch(node.external_bitmap.before(slice));
+                node.children = vec.data();
+                node.external_bitmap.unset(slice);
                 break;
             }
         }

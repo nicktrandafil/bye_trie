@@ -36,13 +36,14 @@ TEST_CASE("", "[Bits][concatenated]") {
 
 TEST_CASE("", "[ExternalBitMap][exists][before]") {
     detail::ExternalBitMap bitmap(0b110);
-    REQUIRE(!bitmap.exists(0));
-    REQUIRE(bitmap.exists(1));
-    REQUIRE(bitmap.before(0) == 0);
-    REQUIRE(bitmap.before(1) == 0);
-    REQUIRE(bitmap.before(2) == 1);
-    REQUIRE(bitmap.before(3) == 2);
-    REQUIRE(bitmap.before(4) == 2);
+    using detail::Bits;
+    REQUIRE(!bitmap.exists(Bits{0, 5}));
+    REQUIRE(bitmap.exists(Bits{1, 5}));
+    REQUIRE(bitmap.before(Bits{0, 5}) == 0);
+    REQUIRE(bitmap.before(Bits{1, 5}) == 0);
+    REQUIRE(bitmap.before(Bits{2, 5}) == 1);
+    REQUIRE(bitmap.before(Bits{3, 5}) == 2);
+    REQUIRE(bitmap.before(Bits{4, 5}) == 2);
 }
 
 TEST_CASE("", "[InternalBitMap][set][unset][exists]") {
@@ -434,7 +435,7 @@ TEST_CASE("Erase values", "[Trie][erase_exact]") {
     SECTION("Unfold-cleaning just the leaf which contains the value") {
         everload_trie::Trie<uint32_t, long> trie;
         trie.insert(0b0'00000'00000, 11, 0);
-        trie.insert(0b0'00000, 6, 1);
+        trie.insert(      0b0'00000, 6, 1);
         REQUIRE(trie.erase_exact(0b0'00000'00000, 11));
         REQUIRE(trie.size() == 1);
         REQUIRE(*trie.match_exact(0b0'00000, 6) == 1);
