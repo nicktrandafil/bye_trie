@@ -47,53 +47,54 @@ TEST_CASE("", "[ExternalBitMap][exists][before]") {
 
 TEST_CASE("", "[InternalBitMap][set][unset][exists]") {
     detail::InternalBitMap bitmap(0b0'1000000000001010'10000010'1001'10'1);
+    using detail::Bits;
     SECTION("4 length") {
         uint8_t idx;
-        REQUIRE(!bitmap.exists(idx, 14, 4));
-        bitmap.set(14, 4);
-        REQUIRE(bitmap.exists(idx, 14, 4));
+        REQUIRE(!bitmap.exists(idx, detail::Bits{14, 4}));
+        bitmap.set(Bits{14, 4});
+        REQUIRE(bitmap.exists(idx, detail::Bits{14, 4}));
         REQUIRE(idx == 8);
-        bitmap.unset(14, 4);
-        REQUIRE(!bitmap.exists(idx, 14, 4));
+        bitmap.unset(Bits{14, 4});
+        REQUIRE(!bitmap.exists(idx, detail::Bits{14, 4}));
     }
 
     SECTION("3 length") {
         uint8_t idx;
-        REQUIRE(!bitmap.exists(idx, 6, 3));
-        bitmap.set(6, 3);
-        REQUIRE(bitmap.exists(idx, 6, 3));
+        REQUIRE(!bitmap.exists(idx, detail::Bits{6, 3}));
+        bitmap.set(Bits{6, 3});
+        REQUIRE(bitmap.exists(idx, detail::Bits{6, 3}));
         REQUIRE(idx == 5);
-        bitmap.unset(6, 3);
-        REQUIRE(!bitmap.exists(idx, 6, 3));
+        bitmap.unset(Bits{6, 3});
+        REQUIRE(!bitmap.exists(idx, detail::Bits{6, 3}));
     }
 
     SECTION("2 length") {
         uint8_t idx;
-        REQUIRE(!bitmap.exists(idx, 2, 2));
-        bitmap.set(2, 2);
-        REQUIRE(bitmap.exists(idx, 2, 2));
+        REQUIRE(!bitmap.exists(idx, detail::Bits{2, 2}));
+        bitmap.set(Bits{2, 2});
+        REQUIRE(bitmap.exists(idx, detail::Bits{2, 2}));
         REQUIRE(idx == 3);
-        bitmap.unset(2, 2);
-        REQUIRE(!bitmap.exists(idx, 2, 2));
+        bitmap.unset(Bits{2, 2});
+        REQUIRE(!bitmap.exists(idx, detail::Bits{2, 2}));
     }
 
     SECTION("1 length") {
         uint8_t idx;
-        REQUIRE(!bitmap.exists(idx, 0, 1));
-        bitmap.set(0, 1);
-        REQUIRE(bitmap.exists(idx, 0, 1));
+        REQUIRE(!bitmap.exists(idx, detail::Bits{0, 1}));
+        bitmap.set(Bits{0, 1});
+        REQUIRE(bitmap.exists(idx, detail::Bits{0, 1}));
         REQUIRE(idx == 1);
-        bitmap.unset(0, 1);
-        REQUIRE(!bitmap.exists(idx, 0, 1));
+        bitmap.unset(Bits{0, 1});
+        REQUIRE(!bitmap.exists(idx, detail::Bits{0, 1}));
     }
 
     SECTION("0 length") {
         uint8_t idx;
-        REQUIRE(bitmap.exists(idx, 0, 0));
-        bitmap.unset(0, 0);
-        REQUIRE(!bitmap.exists(idx, 0, 0));
-        bitmap.set(0, 0);
-        REQUIRE(bitmap.exists(idx, 0, 0));
+        REQUIRE(bitmap.exists(idx, detail::Bits{0, 0}));
+        bitmap.unset(Bits{0, 0});
+        REQUIRE(!bitmap.exists(idx, detail::Bits{0, 0}));
+        bitmap.set(Bits{0, 0});
+        REQUIRE(bitmap.exists(idx, detail::Bits{0, 0}));
         REQUIRE(idx == 0);
     }
 }
@@ -101,60 +102,61 @@ TEST_CASE("", "[InternalBitMap][set][unset][exists]") {
 TEST_CASE("", "[InternalBitMap][longest_before]") {
     detail::InternalBitMap bitmap(0b0'1000000000001010'10000010'1001'10'1);
     uint8_t idx;
+    using detail::Bits;
 
     SECTION("4") {
         SECTION("match") {
-            REQUIRE(bitmap.find_longest(idx, 0b1111, 4).value() == 4);
+            REQUIRE(bitmap.find_longest(idx, Bits{0b1111u, 4}).value() == 4);
             REQUIRE(idx == 8);
-            REQUIRE(bitmap.find_longest(idx, 0b11, 4).value() == 4);
+            REQUIRE(bitmap.find_longest(idx, Bits{0b11, 4}).value() == 4);
             REQUIRE(idx == 7);
         }
         SECTION("longest") {
-            REQUIRE(bitmap.find_longest(idx, 0b0111, 4).value() == 3);
+            REQUIRE(bitmap.find_longest(idx, Bits{0b0111, 4}).value() == 3);
             REQUIRE(idx == 5);
         }
     }
 
     SECTION("3") {
         SECTION("match") {
-            REQUIRE(bitmap.find_longest(idx, 0b111, 3).value() == 3);
+            REQUIRE(bitmap.find_longest(idx, Bits{0b111, 3}).value() == 3);
             REQUIRE(idx == 5);
         }
         SECTION("longest") {
-            REQUIRE(bitmap.find_longest(idx, 0b011, 3).value() == 2);
+            REQUIRE(bitmap.find_longest(idx, Bits{0b011, 3}).value() == 2);
             REQUIRE(idx == 3);
         }
     }
 
     SECTION("2") {
         SECTION("match") {
-            REQUIRE(bitmap.find_longest(idx, 0b11, 2).value() == 2);
+            REQUIRE(bitmap.find_longest(idx, Bits{0b11, 2}).value() == 2);
             REQUIRE(idx == 3);
         }
         SECTION("longest") {
-            REQUIRE(bitmap.find_longest(idx, 0b01, 2).value() == 1);
+            REQUIRE(bitmap.find_longest(idx, Bits{0b01, 2}).value() == 1);
             REQUIRE(idx == 1);
         }
     }
 
     SECTION("1") {
         SECTION("match") {
-            REQUIRE(bitmap.find_longest(idx, 0b1, 1).value() == 1);
+            REQUIRE(bitmap.find_longest(idx, Bits{0b1, 1}).value() == 1);
             REQUIRE(idx == 1);
         }
         SECTION("longest") {
-            REQUIRE(bitmap.find_longest(idx, 0b0, 1).value() == 0);
+            REQUIRE(bitmap.find_longest(idx, Bits{0b0, 1}).value() == 0);
             REQUIRE(idx == 0);
         }
     }
 
     SECTION("0") {
         SECTION("match") {
-            REQUIRE(bitmap.find_longest(idx, 0b0, 0).value() == 0);
+            REQUIRE(bitmap.find_longest(idx, Bits{0b0, 0}).value() == 0);
             REQUIRE(idx == 0);
         }
         SECTION("longest") {
-            REQUIRE(bitmap.find_longest(idx, 0b1, 0).value() == 0);
+            REQUIRE(bitmap.find_longest(idx, Bits{0b1, 0}).value() == 0);
             REQUIRE(idx == 0);
         }
     }

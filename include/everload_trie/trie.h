@@ -40,12 +40,26 @@
 
 static_assert(sizeof(void*) == 8, "64-bit only");
 
+/// \todo The result of an arithmetic on two `uint8_t` is an `int`. This
+/// implies some explicit casts back to `uint8_t` in the code, which makes
+/// the code more verbose. Should I just use `unsigned` instead?
+
 namespace everload_trie {
 namespace detail {
 
-// todo switch to unsigned
-inline constexpr uint8_t stride = 5;     // bits
+/// Piece of prefix used to index branches of a node
+inline constexpr uint8_t stride = 5; // bits
+
+/// Piece of prefix used to index values of a node
+/// It is one shorter than `stride` because `stride`-length values are
+/// stored as 0-length prefixes in one node down.
 inline constexpr uint8_t stride_m_1 = 4; // bits
+
+constexpr inline uint8_t take_slice(uint8_t value, uint8_t start, uint8_t len) noexcept {
+    assert(start < 8);
+    assert(start + len <= 8);
+    return (len == 8) ? (value >> start) : ((value >> start) & ((uint8_t(1) << len) - 1));
+}
 
 constexpr inline uint32_t take_slice(uint32_t value,
                                      uint8_t start,
@@ -87,7 +101,7 @@ public:
         return bits_;
     }
 
-    uint8_t value() const noexcept {
+    T value() const noexcept {
         return take_slice(bits_, 0, len_);
     }
 
@@ -113,7 +127,7 @@ public:
     }
 
     Bits& operator++() noexcept {
-        if (value() == ((1 << len_) - 1)) {
+        if (value() == static_cast<T>(((1 << len_) - 1))) {
             bits_ = 0;
             ++len_;
         } else {
@@ -131,6 +145,30 @@ private:
     uint8_t len_;
 };
 
+class StrideM1 {
+public:
+    template <class T>
+    /*implicit*/ StrideM1(Bits<T> bits) noexcept {
+        assert(bits.len() <= stride_m_1);
+        inner = {static_cast<uint8_t>(bits.bits()), bits.len()};
+    }
+
+    uint8_t value() const noexcept {
+        return inner.value();
+    }
+
+    uint8_t len() const noexcept {
+        return inner.len();
+    }
+
+    uint8_t bits() const noexcept {
+        return inner.bits();
+    }
+
+private:
+    Bits<uint8_t> inner;
+};
+
 // 0|0000000000000000|00000000|0000|00|0
 //                 16        8    4  2 1
 //                          15    7  3 1
@@ -143,31 +181,28 @@ public:
     }
 
     std::optional<uint8_t> find_longest(uint8_t& values_before,
-                                        uint8_t i,
-                                        uint8_t len) const noexcept {
-        assert(i < 16);
-        assert(len < stride);
-        switch (len) {
+                                        StrideM1 bits) const noexcept {
+        switch (bits.len()) {
         case 4:
-            if (auto const idx = (1u << (15 + (i & 0b1111))); inner & idx) {
+            if (auto const idx = (1u << (15 + (bits.bits() & 0b1111))); inner & idx) {
                 values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
                 return 4;
             }
             [[fallthrough]];
         case 3:
-            if (auto const idx = (1u << (7 + (i & 0b111))); inner & idx) {
+            if (auto const idx = (1u << (7 + (bits.bits() & 0b111))); inner & idx) {
                 values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
                 return 3;
             }
             [[fallthrough]];
         case 2:
-            if (auto const idx = (1u << (3 + (i & 0b11))); inner & idx) {
+            if (auto const idx = (1u << (3 + (bits.bits() & 0b11))); inner & idx) {
                 values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
                 return 2;
             }
             [[fallthrough]];
         case 1:
-            if (auto const idx = (1u << (1 + (i & 0b1))); inner & idx) {
+            if (auto const idx = (1u << (1 + (bits.bits() & 0b1))); inner & idx) {
                 values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
                 return 1;
             }
@@ -181,27 +216,25 @@ public:
         return std::nullopt;
     }
 
-    bool exists(uint8_t& values_before, uint8_t i, uint8_t len) const noexcept {
-        assert(i < 16);
-        assert(len < stride);
-        switch (len) {
+    bool exists(uint8_t& values_before, StrideM1 bits) const noexcept {
+        switch (bits.len()) {
         [[likely]] case 4: {
-            auto const idx = (1u << (15 + i));
+            auto const idx = (1u << (15 + bits.value()));
             values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
             return inner & idx;
         }
         case 3: {
-            auto const idx = (1u << (7 + i));
+            auto const idx = (1u << (7 + bits.value()));
             values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
             return inner & idx;
         }
         case 2: {
-            auto const idx = (1u << (3 + i));
+            auto const idx = (1u << (3 + bits.value()));
             values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
             return inner & idx;
         }
         case 1: {
-            auto const idx = (1u << (1 + i));
+            auto const idx = (1u << (1 + bits.value()));
             values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
             return inner & idx;
         }
@@ -215,21 +248,19 @@ public:
         return static_cast<uint8_t>(std::popcount(inner));
     }
 
-    void set(uint8_t i, uint8_t len) {
-        assert(i < 16);
-        assert(len < stride);
-        switch (len) {
+    void set(StrideM1 bits) {
+        switch (bits.len()) {
         case 4:
-            inner |= (1u << (15 + i));
+            inner |= (1u << (15 + bits.value()));
             break;
         case 3:
-            inner |= (1u << (7 + i));
+            inner |= (1u << (7 + bits.value()));
             break;
         case 2:
-            inner |= (1u << (3 + i));
+            inner |= (1u << (3 + bits.value()));
             break;
         case 1:
-            inner |= (1u << (1 + i));
+            inner |= (1u << (1 + bits.value()));
             break;
         default:
             inner |= 1u;
@@ -237,21 +268,19 @@ public:
         }
     }
 
-    void unset(uint8_t i, uint8_t len) {
-        assert(i < 16);
-        assert(len < stride);
-        switch (len) {
+    void unset(StrideM1 bits) {
+        switch (bits.len()) {
         case 4:
-            inner &= ~(1u << (15 + i));
+            inner &= ~(1u << (15 + bits.value()));
             break;
         case 3:
-            inner &= ~(1u << (7 + i));
+            inner &= ~(1u << (7 + bits.value()));
             break;
         case 2:
-            inner &= ~(1u << (3 + i));
+            inner &= ~(1u << (3 + bits.value()));
             break;
         case 1:
-            inner &= ~(1u << (1 + i));
+            inner &= ~(1u << (1 + bits.value()));
             break;
         default:
             inner &= ~1u;
@@ -649,7 +678,7 @@ public:
         auto const slice = this->fixed.concatenated(reminder);
         auto const prefix = this->prefix.concatenated(slice);
         uint8_t idx;
-        auto const exists = node.internal_bitmap.exists(idx, slice.value(), slice.len());
+        auto const exists = node.internal_bitmap.exists(idx, slice);
         assert(exists);
         static_cast<void>(exists);
         return {prefix.bits(),
@@ -668,8 +697,7 @@ public:
                 auto slice = fixed.concatenated(reminder);
                 while (slice.len() < detail::stride) {
                     uint8_t vec_idx;
-                    if (node.internal_bitmap.exists(
-                                vec_idx, slice.value(), slice.len())) {
+                    if (node.internal_bitmap.exists(vec_idx, slice)) {
                         return *this;
                     }
                     ++reminder;
@@ -729,7 +757,7 @@ private:
         this->reminder = detail::Bits<P>(0, 0);
         uint8_t vec_idx;
         auto const slice = fixed.concatenated(reminder);
-        if (!node.internal_bitmap.exists(vec_idx, slice.value(), slice.len())) {
+        if (!node.internal_bitmap.exists(vec_idx, slice)) {
             ++(*this);
         }
     }
@@ -834,9 +862,8 @@ public:
             return std::nullopt;
         }
 
-        auto const idx = prefix.value();
         uint8_t vec_idx;
-        if (!node->internal_bitmap.exists(vec_idx, idx, prefix.len())) {
+        if (!node->internal_bitmap.exists(vec_idx, prefix)) {
             return std::nullopt;
         }
 
@@ -860,9 +887,8 @@ public:
             return end();
         }
 
-        auto const idx = prefix.value();
         uint8_t vec_idx;
-        if (!node->internal_bitmap.exists(vec_idx, idx, prefix.len())) {
+        if (!node->internal_bitmap.exists(vec_idx, prefix)) {
             return end();
         }
 
@@ -879,10 +905,8 @@ public:
         std::optional<std::pair<uint8_t, T>> longest;
         uint8_t offset = 0;
         auto const update_longest = [&longest, &offset](auto node, auto slice) {
-            auto const idx = slice.value();
             uint8_t vec_idx;
-            if (auto const len =
-                        node.internal_bitmap.find_longest(vec_idx, idx, slice.len())) {
+            if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
                 longest = std::pair{
                         static_cast<uint8_t>(offset + len.value()),
                         std::bit_cast<T>(
@@ -914,10 +938,8 @@ public:
         std::optional<std::pair<uint8_t, detail::Node>> longest;
         uint8_t offset = 0;
         auto const update_longest = [&longest, &offset](auto node, auto slice) {
-            auto const idx = slice.value();
             uint8_t vec_idx;
-            if (auto const len =
-                        node.internal_bitmap.find_longest(vec_idx, idx, slice.len())) {
+            if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
                 longest = std::pair{static_cast<uint8_t>(offset + len.value()), node};
             }
             offset += detail::stride;
@@ -946,9 +968,8 @@ public:
             return false;
         }
 
-        auto const idx = prefix.value();
         uint8_t vec_idx;
-        if (!node->internal_bitmap.exists(vec_idx, idx, prefix.len())) {
+        if (!node->internal_bitmap.exists(vec_idx, prefix)) {
             return false;
         }
 
@@ -961,9 +982,10 @@ public:
             return true;
         }
 
-        vec.erase_value(idx);
+        vec.erase_value(vec_idx);
         node->children = vec.data();
-        node->internal_bitmap.unset(vec_idx, prefix.len());
+        // todo write a test which covers the case where prefix and vec_idx differ
+        node->internal_bitmap.unset(prefix);
         size_ -= 1;
         return true;
     }
@@ -1053,15 +1075,14 @@ private:
                 node->internal_bitmap.total(),
         };
 
-        auto const idx = slice.value();
         uint8_t vec_idx;
-        if (node->internal_bitmap.exists(vec_idx, idx, slice.len())) {
+        if (node->internal_bitmap.exists(vec_idx, slice)) {
             return &vec.value(vec_idx);
         }
 
         node->children =
                 std::move(vec).insert_value(vec_idx, std::bit_cast<void*>(value), alloc_);
-        node->internal_bitmap.set(idx, slice.len());
+        node->internal_bitmap.set(slice);
 
         size_ += 1;
         return nullptr;
