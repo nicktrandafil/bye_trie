@@ -188,11 +188,11 @@ private:
 // 0|0000000000000000|00000000|0000|00|0
 //                 16        8    4  2 1
 //                          15    7  3 1
-class InternalBitMap {
+class InternalBitmap {
 public:
-    InternalBitMap() = default;
+    InternalBitmap() = default;
 
-    explicit InternalBitMap(uint32_t inner) noexcept
+    explicit InternalBitmap(uint32_t inner) noexcept
             : inner{inner} {
     }
 
@@ -312,11 +312,11 @@ private:
     uint32_t inner;
 };
 
-class ExternalBitMap {
+class ExternalBitmap {
 public:
-    ExternalBitMap() = default;
+    ExternalBitmap() = default;
 
-    explicit ExternalBitMap(uint32_t inner) noexcept
+    explicit ExternalBitmap(uint32_t inner) noexcept
             : inner{inner} {
     }
 
@@ -347,8 +347,8 @@ private:
 union ErasedNode;
 
 struct Node {
-    InternalBitMap internal_bitmap;
-    ExternalBitMap external_bitmap;
+    InternalBitmap internal_bitmap;
+    ExternalBitmap external_bitmap;
     ErasedNode* children;
 };
 
@@ -760,7 +760,7 @@ public:
 
 private:
     template <UnsignedIntegral, TrivialLittleObject, Allocator Alloc>
-    friend class Trie;
+    friend class BitsTrie;
 
     explicit Iterator(detail::Node node, detail::Bits<P> prefix) noexcept(false)
             : node{node} {
@@ -791,31 +791,31 @@ private:
 };
 
 template <UnsignedIntegral P, TrivialLittleObject T, Allocator Alloc = SystemAllocator>
-class Trie {
+class BitsTrie {
 public:
     using ValueType = typename Iterator<P, T>::value_type;
 
-    explicit Trie() noexcept(noexcept(Alloc{}))
+    explicit BitsTrie() noexcept(noexcept(Alloc{}))
             : alloc_{}
-            , root_{detail::InternalBitMap{0}, detail::ExternalBitMap{0}, nullptr} {
+            , root_{detail::InternalBitmap{0}, detail::ExternalBitmap{0}, nullptr} {
     }
 
-    explicit Trie(Alloc&& alloc) noexcept
+    explicit BitsTrie(Alloc&& alloc) noexcept
             : alloc_{std::move(alloc)}
-            , root_{detail::InternalBitMap{0}, detail::ExternalBitMap{0}, nullptr} {
+            , root_{detail::InternalBitmap{0}, detail::ExternalBitmap{0}, nullptr} {
     }
 
-    Trie(const Trie&) = delete;
-    Trie& operator=(const Trie&) = delete;
+    BitsTrie(const BitsTrie&) = delete;
+    BitsTrie& operator=(const BitsTrie&) = delete;
 
-    Trie(Trie&& rhs) noexcept
+    BitsTrie(BitsTrie&& rhs) noexcept
             : root_{rhs.root_}
             , size_{rhs.size_} {
         rhs.root_ = detail::Node{};
         rhs.size_ = 0;
     }
 
-    Trie& operator=(Trie&& rhs) noexcept {
+    BitsTrie& operator=(BitsTrie&& rhs) noexcept {
         root_ = rhs.root_;
         size_ = rhs.size_;
         rhs.root_ = detail::Node{};
@@ -1005,7 +1005,7 @@ public:
         return size_;
     }
 
-    ~Trie() noexcept {
+    ~BitsTrie() noexcept {
         detail::RecyclingStack stack;
         stack.push(root_);
         while (!stack.empty()) { // DFS traversal
