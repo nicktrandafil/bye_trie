@@ -11,7 +11,10 @@ else()
     set(${PROJECT_NAME}_sub ON)
 endif()
 
-add_library(everload_trie INTERFACE include/everload_trie/trie.h)
+add_library(everload_trie INTERFACE 
+    include/everload_trie/trie.h
+    include/everload_trie/boost_ip_net_adaptor.h
+)
 target_include_directories(everload_trie INTERFACE include)
 
 function(set_target_build_settings target)
@@ -58,7 +61,10 @@ if(${PROJECT_NAME}_TESTS)
     if(NOT ${PROJECT_NAME}_sub)
         find_package(Catch2 REQUIRED QUIET)
     endif()
-    add_executable(test_${PROJECT_NAME} test/trie.cpp)
+    add_executable(test_${PROJECT_NAME}
+        test/stress_test.cpp
+        test/trie.cpp
+    )
     target_link_libraries(test_${PROJECT_NAME} Catch2::Catch2WithMain ${PROJECT_NAME})
     set_target_build_settings(test_${PROJECT_NAME})
     add_test(test_${PROJECT_NAME} test_${PROJECT_NAME})

@@ -839,7 +839,7 @@ public:
         return prev ? std::optional(std::bit_cast<T>(*prev)) : std::nullopt;
     }
 
-    /// Replace or insert if the exact prefix is not present
+    /// Replace the exact prefix is present otherwise insert
     /// \pre `len <= sizeof(P) * CHAR_BITS`
     /// \post Strong exception guarantee
     /// \return Previous value
@@ -863,7 +863,7 @@ public:
 
     /// Match exact prefix
     /// \pre `len <= sizeof(P) * CHAR_BIT`
-    std::optional<T> match_exact(P bits, uint8_t len) noexcept {
+    std::optional<T> match_exact(P bits, uint8_t len) const noexcept {
         assert(len <= sizeof(P) * CHAR_BIT);
 
         detail::Node* node = &root_;
@@ -888,7 +888,7 @@ public:
     /// Counterpart of `match_exact` which returns an iterator
     /// \pre `len <= sizeof(P) * CHAR_BIT`
     /// \throw std::bad_alloc
-    Iterator<P, T> find_exact(P bits, uint8_t len) noexcept(false) {
+    Iterator<P, T> find_exact(P bits, uint8_t len) const noexcept(false) {
         assert(len <= sizeof(P) * CHAR_BIT);
 
         detail::Node* node = &root_;
@@ -909,7 +909,8 @@ public:
 
     /// Match longest prefix
     /// \pre `len <= sizeof(P) * CHAR_BIT`
-    std::optional<std::pair<uint8_t, T>> match_longest(P bits, uint8_t len) noexcept {
+    std::optional<std::pair<uint8_t, T>> match_longest(P bits,
+                                                       uint8_t len) const noexcept {
         assert(len <= sizeof(P) * CHAR_BIT);
         detail::Node* node = &root_;
         detail::Bits<P> prefix{bits, len};
@@ -1144,7 +1145,7 @@ private:
 
 private:
     Alloc alloc_;
-    detail::Node root_;
+    detail::Node mutable root_;
     size_t size_{0};
 };
 
