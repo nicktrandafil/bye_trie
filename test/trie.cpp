@@ -36,6 +36,18 @@ TEMPLATE_LIST_TEST_CASE("", "[Bits][concatenated]", PrefixTypes) {
     REQUIRE(static_cast<unsigned>(slice.concatenated({1, 1}).value()) == 0b11100);
 }
 
+TEST_CASE("", "[Bits][operator+=(T)]") {
+    detail::Bits<uint8_t> bits;
+    bits += 1;
+    REQUIRE(bits == detail::Bits<uint8_t>{0, 1});
+    bits += 2;
+    REQUIRE(bits == detail::Bits<uint8_t>{0, 2});
+    bits += 2;
+    REQUIRE(bits == detail::Bits<uint8_t>{2, 2});
+    bits += 3;
+    REQUIRE(bits == detail::Bits<uint8_t>{0, 3});
+}
+
 TEST_CASE("", "[ExternalBitmap][exists][before]") {
     detail::ExternalBitmap bitmap(0b110);
     using detail::Bits;

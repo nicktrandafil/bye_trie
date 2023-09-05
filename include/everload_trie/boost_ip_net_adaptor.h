@@ -26,6 +26,8 @@
 
 #include <boost/asio/ip/network_v4.hpp>
 
+#include <ostream>
+
 namespace everload_trie {
 
 namespace detail {
@@ -91,6 +93,11 @@ public:
     using value_type = struct value_type {
         bool operator==(value_type const& rhs) const noexcept = default;
 
+        friend std::ostream& operator<<(std::ostream& os, value_type const& rhs) {
+            return os << "{ prefix: " << rhs.prefix << "; "
+                      << " value: " << rhs.value << "}";
+        }
+
         boost::asio::ip::network_v4 prefix;
         T value;
     };
@@ -99,12 +106,13 @@ public:
     using reference = value_type;
 
     reference operator*() const noexcept {
+        using BytesType = boost::asio::ip::address_v4::bytes_type;
         auto const val = *inner;
         return value_type{
                 boost::asio::ip::make_network_v4(
-                        boost::asio::ip::address_v4{detail::reverse_bits_of_bytes(
-                                std::bit_cast<boost::asio::ip::address_v4::bytes_type>(
-                                        val.prefix))},
+                        boost::asio::ip::make_address_v4(
+                                std::bit_cast<BytesType>(detail::reverse_bits_of_bytes(
+                                        std::bit_cast<BytesType>(val.bits)))),
                         val.len),
                 val.value,
         };
@@ -133,6 +141,8 @@ class BitsTrieIpNetAdapter : private BitsTrie<IntType, T, Allocator> {
 public:
     using Base::Base;
     using Base::size;
+
+    using ValueType = typename IteratorV4<T>::value_type;
 
     auto insert(IpNetTypeCopyOptimized prefix,
                 T value) noexcept(noexcept(Base::insert({}, {}, {}))) {
@@ -171,6 +181,12 @@ public:
 
     IteratorV4<T> find_exact(IpNetTypeCopyOptimized prefix) const noexcept(false) {
         return IteratorV4<T>{Base::find_exact(
+                detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
+                static_cast<uint8_t>(prefix.prefix_length()))};
+    }
+
+    IteratorV4<T> find_longest(IpNetTypeCopyOptimized prefix) const noexcept(false) {
+        return IteratorV4<T>{Base::find_longest(
                 detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
                 static_cast<uint8_t>(prefix.prefix_length()))};
     }

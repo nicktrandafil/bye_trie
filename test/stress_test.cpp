@@ -22,33 +22,40 @@
   SOFTWARE.
 */
 
-#include "everload_trie/boost_ip_net_adaptor.h"
+#include "everload_trie/trie.h"
 
 #include <catch2/catch_all.hpp>
 
+#include <forward_list>
+
 using namespace everload_trie;
-using namespace boost::asio::ip;
 
-TEST_CASE("", "[reverse_bits_of_bytes]") {
-    // clang-format off
-    REQUIRE(detail::reverse_bits_of_bytes(std::bit_cast<address_v4::bytes_type>(
-               0b00000000'00000000'10100000'01010000))
-            == 0b00000000'00000000'00000101'00001010);
-    // clang-format on
-}
+TEST_CASE("Load big data and match every prefix", "[stress]") {
+    std::forward_list<std::pair<detail::Bits<uint32_t>, uint32_t>> prefixes;
+    BitsTrie<uint32_t, long> trie;
+    using Value = BitsTrie<uint32_t, long>::ValueType;
 
-TEST_CASE(
-        "Mostly to ensure compilation tests. We know that the wrapper does nothing but "
-        "`reverse_bits_of_bytes`",
-        "[BitsTrieV4][white-box]") {
-    BitsTrieV4<long> trie;
-    REQUIRE(trie.insert(make_network_v4("0.0.0.0/0"), 0) == std::nullopt);
+    uint32_t i = 0;
+    detail::Bits<uint32_t> bits{4, 8};
+    uint8_t len = 0;
+    while (i < 650'000) {
+        prefixes.emplace_front(bits, i);
+        REQUIRE(!trie.insert(prefixes.front().first.value(),
+                             prefixes.front().first.len(),
+                             prefixes.front().second)
+                         .has_value());
+        ++i;
+        bits += 32;
+        REQUIRE(bits.len() >= len);
+    }
 
-    REQUIRE(trie.replace(make_network_v4("0.0.0.0/0"), 0) == 0);
-    REQUIRE(trie.match_exact(make_network_v4("0.0.0.0/0")) == 0);
-    REQUIRE(trie.match_longest(make_network_v4("1.2.3.4/0"))
-            == (std::pair{make_network_v4("1.2.3.4/0"), 0l}));
-
-    REQUIRE(++trie.begin() == trie.end());
-    REQUIRE(trie.find_exact(make_network_v4("0.0.0.0/0")) == trie.begin());
+    for (auto const& [prefix, value] : prefixes) {
+        REQUIRE(*trie.match_exact(prefix.value(), prefix.len()) == value);
+        REQUIRE(*trie.match_longest(prefix.value(), prefix.len())
+                == (std::pair<uint8_t, long>{prefix.len(), value}));
+        REQUIRE(*trie.find_exact(prefix.value(), prefix.len())
+                == (Value{prefix.bits(), prefix.len(), value}));
+        REQUIRE(*trie.find_longest(prefix.value(), prefix.len())
+                == (Value{prefix.bits(), prefix.len(), value}));
+    }
 }

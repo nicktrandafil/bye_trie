@@ -35,7 +35,7 @@ function(set_target_build_settings target)
 
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         if(CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo|MinSizeRel")
-            set(build_options ${build_options} ${error_flags} -Wno-error=maybe-uninitialized)
+            set(build_options ${build_options} ${error_flags})
         elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
             set(build_options ${build_options} ${sancov_flags})
             set(link_options ${link_options} ${sancov_flags})
@@ -62,6 +62,7 @@ if(${PROJECT_NAME}_TESTS)
         find_package(Catch2 REQUIRED QUIET)
     endif()
     add_executable(test_${PROJECT_NAME}
+        test/boost_ip_net_adaptor.cpp
         test/stress_test.cpp
         test/trie.cpp
     )

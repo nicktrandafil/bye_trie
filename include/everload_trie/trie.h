@@ -34,6 +34,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <optional>
+#include <ostream>
 #include <span>
 #include <type_traits>
 #include <vector>
@@ -47,11 +48,11 @@ static_assert(sizeof(void*) == 8, "64-bit only");
 namespace everload_trie {
 namespace detail {
 
-/// Piece of prefix used to index branches of a node
+/// Slice of prefix used to index branches of a node
 inline constexpr uint8_t stride = 5; // bits
 
-/// Piece of prefix used to index values of a node
-/// It is one shorter than `stride` because `stride`-length values are
+/// Slice of prefix used to index values of a node
+/// It is one shorter than `stride` because `stride`-length prefixes are
 /// stored as 0-length prefixes in one node down.
 inline constexpr uint8_t stride_m_1 = 4; // bits
 
@@ -126,18 +127,37 @@ public:
         return len_ == rhs.len_ && value() == rhs.value();
     }
 
+    /// \post UB when `len() >= sizeof(T) * CHAR_BIT`
     Bits& operator++() noexcept {
         if (value() == static_cast<T>(((1 << len_) - 1))) {
-            bits_ = 0;
             ++len_;
+            bits_ = 0;
         } else {
             ++bits_;
         }
         return *this;
     }
 
+    /// \post UB when `len() >= sizeof(T) * CHAR_BIT`
+    Bits& operator+=(T rhs) noexcept {
+        bits_ += rhs;
+
+        if (auto const len = std::bit_width(bits_); len > len_) {
+            len_ = len;
+            bits_ = 0;
+        }
+
+        return *this;
+    }
+
     std::pair<Bits, Bits> split_at(uint8_t offset) const noexcept {
         return {sub(0, offset), sub(offset)};
+    }
+
+    friend std::ostream& operator<<(std::ostream& os, Bits val) noexcept {
+        using NotCharType = std ::conditional_t<sizeof(T) == 1, int, T>;
+        return os << "Bits{" << static_cast<NotCharType>(val.bits_) << ", "
+                  << static_cast<int>(val.len_) << "}";
     }
 
 private:
@@ -254,10 +274,12 @@ public:
             values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
             return inner & idx;
         }
-        default:
+        case 0:
             values_before = 0;
             return inner & 1;
         }
+        assert(false);
+        return false;
     }
 
     uint8_t total() const noexcept {
@@ -370,7 +392,7 @@ union ErasedNode {
 template <class T>
 concept Trivial = std::is_trivial_v<T>;
 
-template <Trivial T, size_t Capacity = 31>
+template <Trivial T, size_t Capacity = 31 + 1 /*sentinel*/>
 class StaticVec {
 public:
     using Storage = std::array<T, Capacity>;
@@ -388,10 +410,12 @@ public:
     }
 
     T& operator[](size_t i) noexcept {
+        assert(i <= size_); // `=` thanks to sentinel
         return storage_[i];
     }
 
     T operator[](size_t i) const noexcept {
+        assert(i <= size_); // `=` thanks to sentinel
         return storage_[i];
     }
 
@@ -506,12 +530,13 @@ public:
     }
 
     StaticVec<void*> values() const noexcept {
+        assert(values_count <= 31);
         StaticVec<void*> ret(values_count);
         auto const src = inner.subspan(branches_count);
         auto i = 0u;
         for (auto x : src) {
             ret[i * 2] = x.pointers[0];
-            ret[i * 2 + 1] = x.pointers[1];
+            ret[i * 2 + 1] = x.pointers[1]; // sentinel makes it safe
             i += 1;
         }
         return ret;
@@ -689,16 +714,16 @@ public:
     reference operator*() const noexcept {
         auto const slice = this->fixed.concatenated(reminder);
         auto const prefix = this->prefix.concatenated(slice);
-        uint8_t idx;
-        auto const exists = node.internal_bitmap.exists(idx, slice);
+        uint8_t vec_idx = 0;
+        auto const exists = node.internal_bitmap.exists(vec_idx, slice);
         assert(exists);
         static_cast<void>(exists);
         return {prefix.bits(),
                 prefix.len(),
                 std::bit_cast<T>(detail::NodeVec{node.children,
                                                  node.external_bitmap.total(),
-                                                 static_cast<uint8_t>(idx + 1)}
-                                         .values()[idx])};
+                                                 static_cast<uint8_t>(vec_idx + 1)}
+                                         .values()[vec_idx])};
     }
 
     Iterator& operator++() noexcept(false) {
@@ -918,7 +943,7 @@ public:
         std::optional<std::pair<uint8_t, T>> longest;
         uint8_t offset = 0;
         auto const update_longest = [&longest, &offset](auto node, auto slice) {
-            uint8_t vec_idx;
+            uint8_t vec_idx = 0;
             if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
                 longest = std::pair{
                         static_cast<uint8_t>(offset + len.value()),
@@ -943,7 +968,7 @@ public:
     /// Counterpart of `match_longest` which returns an iterator
     /// \pre `len <= sizeof(P) * CHAR_BIT`
     /// \throw std::bad_alloc
-    Iterator<P, T> find_longest(P bits, uint8_t len) noexcept(false) {
+    Iterator<P, T> find_longest(P bits, uint8_t len) const noexcept(false) {
         assert(len <= sizeof(P) * CHAR_BIT);
         detail::Node* node = &root_;
         detail::Bits<P> prefix{bits, len};
@@ -1087,7 +1112,7 @@ private:
                 node->internal_bitmap.total(),
         };
 
-        uint8_t vec_idx;
+        uint8_t vec_idx = 0;
         if (node->internal_bitmap.exists(vec_idx, slice)) {
             return &vec.value(vec_idx);
         }
