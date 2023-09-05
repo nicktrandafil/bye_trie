@@ -13,6 +13,7 @@ endif()
 
 add_library(everload_trie INTERFACE 
     include/everload_trie/trie.h
+    include/everload_trie/uint128.h
     include/everload_trie/boost_ip_net_adaptor.h
 )
 target_include_directories(everload_trie INTERFACE include)

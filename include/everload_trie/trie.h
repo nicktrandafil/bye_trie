@@ -663,12 +663,9 @@ inline constexpr uint8_t leaf_pos(Bits<T> prefix) noexcept {
 template <class T>
 concept UnsignedIntegral = std::unsigned_integral<T>
                         || (sizeof(T) <= 16 && std::is_trivial_v<T> && requires(T val) {
-                               { val << 1 };
-                               { val >> 1 };
-                               { val& val };
-                               { val - val };
+                               { ++val };
                                { val == val };
-                               { static_cast<uint64_t>(val) };
+                               { take_slice(val, 0, 0) } -> std::convertible_to<T>;
                            });
 
 template <class T>

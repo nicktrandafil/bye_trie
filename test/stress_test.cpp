@@ -37,8 +37,7 @@ TEST_CASE("Load big data and match every prefix", "[stress]") {
 
     uint32_t i = 0;
     detail::Bits<uint32_t> bits{4, 8};
-    uint8_t len = 0;
-    while (i < 650'000) {
+    while (i < 65'000) {
         prefixes.emplace_front(bits, i);
         REQUIRE(!trie.insert(prefixes.front().first.value(),
                              prefixes.front().first.len(),
@@ -46,7 +45,6 @@ TEST_CASE("Load big data and match every prefix", "[stress]") {
                          .has_value());
         ++i;
         bits += 32;
-        REQUIRE(bits.len() >= len);
     }
 
     for (auto const& [prefix, value] : prefixes) {

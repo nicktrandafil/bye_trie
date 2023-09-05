@@ -37,6 +37,14 @@ TEST_CASE("", "[reverse_bits_of_bytes]") {
     // clang-format on
 }
 
+TEST_CASE("", "[reverse_bits_of_bytes][Uint128]") {
+    // clang-format off
+    REQUIRE(detail::reverse_bits_of_bytes(std::bit_cast<address_v6::bytes_type>(
+               Uint128{0b00000000'00000000'10100000'01010000}))
+            == Uint128{0b00000000'00000000'00000101'00001010});
+    // clang-format on
+}
+
 TEST_CASE(
         "Mostly to ensure compilation tests. We know that the wrapper does nothing but "
         "`reverse_bits_of_bytes`",

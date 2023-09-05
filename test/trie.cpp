@@ -24,6 +24,8 @@
 
 #include "everload_trie/trie.h"
 
+#include "everload_trie/uint128.h"
+
 #include <catch2/catch_all.hpp>
 
 using namespace everload_trie;
@@ -707,4 +709,20 @@ TEST_CASE("Iterator interface", "[BitsTrie][find_exact][find_longest]") {
             REQUIRE(trie.find_longest(0, 1) == trie.end());
         }
     }
+}
+
+TEST_CASE(
+        "Call every function of the interface with 128 bit prefix type just to ensure "
+        "compilation",
+        "[BitsTrie]") {
+    using BitsTrie = BitsTrie<Uint128, long>;
+
+    BitsTrie trie;
+    trie.insert(0, 0, 1);
+    trie.replace(0, 0, 1);
+    trie.match_exact(0, 0);
+    trie.match_longest(0, 0);
+    trie.find_longest(0, 0);
+    trie.begin();
+    trie.end();
 }
