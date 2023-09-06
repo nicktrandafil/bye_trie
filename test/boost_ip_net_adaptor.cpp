@@ -29,44 +29,69 @@
 using namespace everload_trie;
 using namespace boost::asio::ip;
 
-TEST_CASE("", "[reverse_bits_of_bytes]") {
-    // clang-format off
-    REQUIRE(detail::reverse_bits_of_bytes(std::bit_cast<address_v4::bytes_type>(
-               0b00000000'00000000'10100000'01010000))
-            == 0b00000000'00000000'00000101'00001010);
-    // clang-format on
-}
+TEST_CASE("Reversing bits of bytes", "[reverse_bits_of_bytes]") {
+    SECTION("uint32_t") {
+        REQUIRE(detail::reverse_bits_of_bytes(std::bit_cast<address_v4::bytes_type>(
+                        0b00000000'00000000'10100000'01010000))
+                == 0b00000000'00000000'00000101'00001010);
+    }
 
-TEST_CASE("", "[reverse_bits_of_bytes][Uint128]") {
-    // clang-format off
-    REQUIRE(detail::reverse_bits_of_bytes(std::bit_cast<address_v6::bytes_type>(
-               Uint128{0b00000000'00000000'10100000'01010000}))
-            == Uint128{0b00000000'00000000'00000101'00001010});
-    // clang-format on
+    SECTION("Uint128") {
+        REQUIRE(detail::reverse_bits_of_bytes(std::bit_cast<address_v6::bytes_type>(
+                        Uint128{0b00000000'00000000'10100000'01010000}))
+                == Uint128{0b00000000'00000000'00000101'00001010});
+    }
 }
 
 TEST_CASE(
         "Mostly to ensure compilation tests. We know that the wrapper does nothing but "
         "`reverse_bits_of_bytes`",
-        "[BitsTrieV4][white-box]") {
-    BitsTrieV4<long> trie;
-    REQUIRE(trie.insert(make_network_v4("0.0.0.0/0"), 0) == std::nullopt);
+        "[white-box]") {
+    SECTION("BitsTrieV4") {
+        BitsTrieV4<long> trie;
+        REQUIRE(trie.insert(make_network_v4("0.0.0.0/0"), 0) == std::nullopt);
 
-    REQUIRE(trie.replace(make_network_v4("0.0.0.0/0"), 0) == 0);
-    REQUIRE(trie.match_exact(make_network_v4("0.0.0.0/0")) == 0);
-    REQUIRE(trie.match_longest(make_network_v4("1.2.3.4/0"))
-            == (std::pair{make_network_v4("1.2.3.4/0"), 0l}));
+        REQUIRE(trie.replace(make_network_v4("0.0.0.0/0"), 0) == 0);
+        REQUIRE(trie.match_exact(make_network_v4("0.0.0.0/0")) == 0);
+        REQUIRE(trie.match_longest(make_network_v4("1.2.3.4/0"))
+                == (std::pair{make_network_v4("1.2.3.4/0"), 0l}));
 
-    REQUIRE(++trie.begin() == trie.end());
-    REQUIRE(trie.find_exact(make_network_v4("0.0.0.0/0")) == trie.begin());
-    REQUIRE(trie.find_longest(make_network_v4("0.0.0.0/0")) == trie.begin());
+        REQUIRE(++trie.begin() == trie.end());
+        REQUIRE(trie.find_exact(make_network_v4("0.0.0.0/0")) == trie.begin());
+        REQUIRE(trie.find_longest(make_network_v4("0.0.0.0/0")) == trie.begin());
+    }
+
+    SECTION("BitsTrieV6") {
+        BitsTrieV6<long> trie;
+        REQUIRE(trie.insert(make_network_v6("::/0"), 0) == std::nullopt);
+
+        REQUIRE(trie.replace(make_network_v6("::/0"), 0) == 0);
+        REQUIRE(trie.match_exact(make_network_v6("::/0")) == 0);
+        REQUIRE(trie.match_longest(make_network_v6("1::/0"))
+                == (std::pair{make_network_v6("1::/0"), 0l}));
+
+        REQUIRE(++trie.begin() == trie.end());
+        REQUIRE(trie.find_exact(make_network_v6("::/0")) == trie.begin());
+        REQUIRE(trie.find_longest(make_network_v6("::/0")) == trie.begin());
+    }
 }
 
-TEST_CASE("Indirect testing of IteratorV4::operator*()", "[BitsTrieV4][white-box]") {
-    BitsTrieV4<long> trie;
-    using Value = BitsTrieV4<long>::ValueType;
-    REQUIRE(trie.insert(make_network_v4("25.0.0.0/8"), 1) == std::nullopt);
+TEST_CASE("Indirect testing of IteratorV4::operator*()", "[white-box]") {
+    SECTION("BitsTrieV4") {
+        BitsTrieV4<long> trie;
+        using Value = BitsTrieV4<long>::ValueType;
+        REQUIRE(trie.insert(make_network_v4("25.0.0.0/8"), 1) == std::nullopt);
 
-    REQUIRE(*trie.find_longest(make_network_v4("25.1.0.0/16"))
-            == Value{.prefix = make_network_v4("25.0.0.0/8"), .value = 1});
+        REQUIRE(*trie.find_longest(make_network_v4("25.1.0.0/16"))
+                == Value{.prefix = make_network_v4("25.0.0.0/8"), .value = 1});
+    }
+
+    SECTION("BitsTrieV6") {
+        BitsTrieV6<long> trie;
+        using Value = BitsTrieV6<long>::ValueType;
+        REQUIRE(trie.insert(make_network_v6("::/0"), 1) == std::nullopt);
+
+        REQUIRE(*trie.find_longest(make_network_v6("::1/128"))
+                == Value{.prefix = make_network_v6("::/0"), .value = 1});
+    }
 }

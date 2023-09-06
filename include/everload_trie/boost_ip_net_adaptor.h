@@ -88,9 +88,9 @@ inline Uint128 reverse_bits_of_bytes(
 
 } // namespace detail
 
-template <class PrefixType, TrivialLittleObject T>
+template <class PrefixType, UnsignedIntegral IntType, TrivialLittleObject T>
 class IteratorAdaptor {
-    using Inner = Iterator<uint32_t, T>;
+    using Inner = Iterator<IntType, T>;
 
 public:
     explicit IteratorAdaptor(Inner x) noexcept(false)
@@ -150,7 +150,7 @@ public:
     using Base::Base;
     using Base::size;
 
-    using ValueType = typename IteratorAdaptor<IpNetType, T>::value_type;
+    using ValueType = typename IteratorAdaptor<IpNetType, IntType, T>::value_type;
 
     auto insert(IpNetTypeCopyOptimized prefix,
                 T value) noexcept(noexcept(Base::insert({}, {}, {}))) {
@@ -187,26 +187,26 @@ public:
         return std::pair{IpNetType{prefix.address(), prefix_length}, value};
     }
 
-    IteratorAdaptor<IpNetType, T> find_exact(IpNetTypeCopyOptimized prefix) const
+    IteratorAdaptor<IpNetType, IntType, T> find_exact(IpNetTypeCopyOptimized prefix) const
             noexcept(false) {
-        return IteratorAdaptor<IpNetType, T>{Base::find_exact(
+        return IteratorAdaptor<IpNetType, IntType, T>{Base::find_exact(
                 detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
                 static_cast<uint8_t>(prefix.prefix_length()))};
     }
 
-    IteratorAdaptor<IpNetType, T> find_longest(IpNetTypeCopyOptimized prefix) const
-            noexcept(false) {
-        return IteratorAdaptor<IpNetType, T>{Base::find_longest(
+    IteratorAdaptor<IpNetType, IntType, T> find_longest(
+            IpNetTypeCopyOptimized prefix) const noexcept(false) {
+        return IteratorAdaptor<IpNetType, IntType, T>{Base::find_longest(
                 detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
                 static_cast<uint8_t>(prefix.prefix_length()))};
     }
 
-    IteratorAdaptor<IpNetType, T> begin() const noexcept(false) {
-        return IteratorAdaptor<IpNetType, T>{Base::begin()};
+    IteratorAdaptor<IpNetType, IntType, T> begin() const noexcept(false) {
+        return IteratorAdaptor<IpNetType, IntType, T>{Base::begin()};
     }
 
-    IteratorAdaptor<IpNetType, T> end() const noexcept(false) {
-        return IteratorAdaptor<IpNetType, T>{Base::end()};
+    IteratorAdaptor<IpNetType, IntType, T> end() const noexcept(false) {
+        return IteratorAdaptor<IpNetType, IntType, T>{Base::end()};
     }
 };
 

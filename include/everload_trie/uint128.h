@@ -33,6 +33,7 @@ namespace everload_trie {
 class Uint128 {
 public:
     constexpr Uint128() = default;
+
     constexpr Uint128(__uint128_t x) noexcept
             : inner{x} {
     }
