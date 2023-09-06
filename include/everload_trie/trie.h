@@ -41,10 +41,6 @@
 
 static_assert(sizeof(void*) == 8, "64-bit only");
 
-/// \todo The result of an arithmetic on two `uint8_t` is an `int`. This
-/// implies some explicit casts back to `uint8_t` in the code, which makes
-/// the code more verbose. Should I just use `unsigned` instead?
-
 namespace everload_trie {
 namespace detail {
 
@@ -56,28 +52,12 @@ inline constexpr uint8_t stride = 5; // bits
 /// stored as 0-length prefixes in one node down.
 inline constexpr uint8_t stride_m_1 = 4; // bits
 
-constexpr inline uint8_t take_slice(uint8_t value, uint8_t start, uint8_t len) noexcept {
-    assert(start < 8);
-    assert(start + len <= 8);
-    return (len == 8) ? (value >> start) : ((value >> start) & ((uint8_t(1) << len) - 1));
-}
-
-constexpr inline uint32_t take_slice(uint32_t value,
-                                     uint8_t start,
-                                     uint8_t len) noexcept {
-    assert(start < 32);
-    assert(start + len <= 32);
-    return (len == 32) ? (value >> start)
-                       : ((value >> start) & ((uint32_t(1) << len) - 1));
-}
-
-constexpr inline uint64_t take_slice(uint64_t value,
-                                     uint8_t start,
-                                     uint8_t len) noexcept {
-    assert(start < 64);
-    assert(start + len <= 64);
-    return (len == 64) ? (value >> start)
-                       : ((value >> start) & ((uint64_t(1) << len) - 1));
+template <class T>
+constexpr inline T take_slice(T value, uint8_t start, uint8_t len) noexcept {
+    assert(start < sizeof(T) * CHAR_BIT);
+    assert(start + len <= sizeof(T) * CHAR_BIT);
+    return (len == sizeof(T) * CHAR_BIT) ? (value >> start)
+                                         : ((value >> start) & ((T(1) << len) - 1));
 }
 
 template <class T>
@@ -665,7 +645,8 @@ concept UnsignedIntegral = std::unsigned_integral<T>
                         || (sizeof(T) <= 16 && std::is_trivial_v<T> && requires(T val) {
                                { ++val };
                                { val == val };
-                               { take_slice(val, 0, 0) } -> std::convertible_to<T>;
+                               { val << 0 };
+                               { val >> 0 };
                            });
 
 template <class T>

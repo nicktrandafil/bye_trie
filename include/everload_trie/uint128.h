@@ -24,42 +24,8 @@
 
 #pragma once
 
-#include <cassert>
-#include <cstddef>
-#include <cstdint>
-
 namespace everload_trie {
 
-class Uint128 {
-public:
-    constexpr Uint128() = default;
-
-    constexpr Uint128(__uint128_t x) noexcept
-            : inner{x} {
-    }
-
-    constexpr bool operator==(Uint128 const& other) const noexcept = default;
-
-    operator __uint128_t() const noexcept {
-        return inner;
-    }
-
-    Uint128& operator++() noexcept {
-        ++inner;
-        return *this;
-    }
-
-    friend constexpr inline Uint128 take_slice(Uint128 value,
-                                               uint8_t start,
-                                               uint8_t len) noexcept {
-        assert(start < 128);
-        assert(start + len <= 128);
-        return (len == 128) ? (value.inner >> start)
-                            : ((value.inner >> start) & ((__uint128_t(1) << len) - 1));
-    }
-
-private:
-    __uint128_t inner;
-};
+using Uint128 = __uint128_t;
 
 } // namespace everload_trie
