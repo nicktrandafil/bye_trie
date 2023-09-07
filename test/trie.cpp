@@ -186,7 +186,7 @@ public:
     }
 
     ~MallocResource() noexcept {
-        alloc.dealloc(vec->data());
+        alloc.dealloc(MemBlk{vec->data(), 0});
     }
 
     SystemAllocator alloc;
@@ -237,19 +237,19 @@ TEST_CASE("Erase value", "[NodeVec][erase_value]") {
     vec.insert_value(1, &fake[1], guard.alloc);
     vec.insert_value(2, &fake[2], guard.alloc);
     SECTION("erase first") {
-        vec.erase_value(0);
+        vec.erase_value(0, guard.alloc);
         REQUIRE(vec.values().size() == 2);
         REQUIRE(vec.value(0) == &fake[1]);
         REQUIRE(vec.value(1) == &fake[2]);
     }
     SECTION("erase last") {
-        vec.erase_value(2);
+        vec.erase_value(2, guard.alloc);
         REQUIRE(vec.values().size() == 2);
         REQUIRE(vec.value(0) == &fake[0]);
         REQUIRE(vec.value(1) == &fake[1]);
     }
     SECTION("erase middle") {
-        vec.erase_value(1);
+        vec.erase_value(1, guard.alloc);
         REQUIRE(vec.values().size() == 2);
         REQUIRE(vec.value(0) == &fake[0]);
         REQUIRE(vec.value(1) == &fake[2]);
@@ -264,19 +264,19 @@ TEST_CASE("Erase branch", "[NodeVec][erase_branch]") {
     vec.insert_branch(1, detail::Node{{}, {}, &fake[1]}, guard.alloc);
     vec.insert_branch(2, detail::Node{{}, {}, &fake[2]}, guard.alloc);
     SECTION("erase first") {
-        vec.erase_branch(0);
+        vec.erase_branch(0, guard.alloc);
         REQUIRE(vec.branches().size() == 2);
         REQUIRE(vec.branches()[0].node.children == &fake[1]);
         REQUIRE(vec.branches()[1].node.children == &fake[2]);
     }
     SECTION("erase last") {
-        vec.erase_branch(2);
+        vec.erase_branch(2, guard.alloc);
         REQUIRE(vec.branches().size() == 2);
         REQUIRE(vec.branches()[0].node.children == &fake[0]);
         REQUIRE(vec.branches()[1].node.children == &fake[1]);
     }
     SECTION("erase middle") {
-        vec.erase_branch(1);
+        vec.erase_branch(1, guard.alloc);
         REQUIRE(vec.branches().size() == 2);
         REQUIRE(vec.branches()[0].node.children == &fake[0]);
         REQUIRE(vec.branches()[1].node.children == &fake[2]);
@@ -491,8 +491,8 @@ TEST_CASE("", "[RecyclingStack]") {
         detail::RecyclingStack stack;
         stack.recycle(std::span(storage));
         int i = 0;
-        stack.for_each_useless([&storage, &i](auto ptr) {
-            REQUIRE(ptr == storage.data());
+        stack.for_each_useless([&storage, &i](auto blk) {
+            REQUIRE(blk == MemBlk{storage.data(), 16});
             i += 1;
         });
         REQUIRE(i == 1);
@@ -502,8 +502,8 @@ TEST_CASE("", "[RecyclingStack]") {
         detail::RecyclingStack stack;
         stack.recycle(std::span(storage));
         int i = 0;
-        stack.for_each_free([&storage, &i](auto ptr) {
-            REQUIRE(ptr == storage.data());
+        stack.for_each_free([&storage, &i](auto blk) {
+            REQUIRE(blk == MemBlk{storage.data(), 32});
             i += 1;
         });
         REQUIRE(i == 1);
@@ -530,8 +530,8 @@ TEST_CASE("", "[RecyclingStack]") {
         }
         REQUIRE(stack.empty());
         int i = 0;
-        stack.for_each_free([&storage, &i](auto ptr) {
-            REQUIRE(ptr == storage.data());
+        stack.for_each_free([&storage, &i](auto blk) {
+            REQUIRE(blk == MemBlk{storage.data(), 32});
             i += 1;
         });
         REQUIRE(i == 1);
@@ -540,16 +540,16 @@ TEST_CASE("", "[RecyclingStack]") {
 
 TEST_CASE("Exception guarantee", "[BitsTrie][insert]") {
     struct Alloc {
-        void* realloc(void* ptr, size_t size) noexcept(false) {
+        MemBlk realloc(MemBlk blk, size_t size) noexcept(false) {
             if (tickets-- == 0) {
                 throw std::bad_alloc();
             } else {
-                return std::realloc(ptr, size);
+                return MemBlk{std::realloc(blk.ptr, size), size};
             }
         }
 
-        void dealloc(void* ptr) noexcept {
-            std::free(ptr);
+        void dealloc(MemBlk blk) noexcept {
+            std::free(blk.ptr);
         }
 
         uint32_t tickets = 0;

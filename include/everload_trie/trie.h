@@ -42,6 +42,13 @@
 static_assert(sizeof(void*) == 8, "64-bit only");
 
 namespace everload_trie {
+
+struct MemBlk {
+    bool operator==(MemBlk const&) const noexcept = default;
+    void* ptr;
+    size_t len;
+};
+
 namespace detail {
 
 /// Slice of prefix used to index branches of a node
@@ -424,12 +431,13 @@ public:
     /// \throw Forwards `Alloc::realloc` exception
     template <class Alloc>
     ErasedNode* insert_branch(uint8_t i, Node branch, Alloc& alloc) noexcept(
-            noexcept(alloc.realloc(nullptr, 0))) {
+            noexcept(alloc.realloc(MemBlk{}, 0))) {
         assert(i <= branches_count);
-        auto const new_size = (inner.size() + 1) * sizeof(ErasedNode);
-        auto const ptr = alloc.realloc(inner.data(), new_size);
+        auto const old_size = inner.size() * sizeof(ErasedNode);
+        auto const new_size = old_size + sizeof(ErasedNode);
+        auto const blk = alloc.realloc(MemBlk{inner.data(), old_size}, new_size);
         branches_count += 1;
-        inner = std::span{static_cast<ErasedNode*>(ptr), inner.size() + 1};
+        inner = std::span{static_cast<ErasedNode*>(blk.ptr), inner.size() + 1};
         std::rotate(inner.begin() + i, inner.end() - 1, inner.end());
         inner[i].node = branch;
         return inner.data();
@@ -437,15 +445,15 @@ public:
 
     /// \throw Forwards `Alloc::realloc` exception
     template <class Alloc>
-    ErasedNode* insert_value(uint8_t i,
-                             void* value,
-                             Alloc& alloc) noexcept(noexcept(alloc.realloc(nullptr, 0))) {
+    ErasedNode* insert_value(uint8_t i, void* value, Alloc& alloc) noexcept(
+            noexcept(alloc.realloc(MemBlk{}, 0))) {
         assert(i <= values_count);
 
         if (values_count % 2 == 0) {
-            auto const new_size = (inner.size() + 1) * sizeof(ErasedNode);
-            auto const ptr = alloc.realloc(inner.data(), new_size);
-            inner = std::span{static_cast<ErasedNode*>(ptr), inner.size() + 1};
+            auto const old_size = inner.size() * sizeof(ErasedNode);
+            auto const new_size = old_size + sizeof(ErasedNode);
+            auto const blk = alloc.realloc(MemBlk{inner.data(), old_size}, new_size);
+            inner = std::span{static_cast<ErasedNode*>(blk.ptr), inner.size() + 1};
             inner.back().pointers = {};
         }
 
@@ -464,18 +472,24 @@ public:
         return inner.data();
     }
 
-    void erase_branch(uint8_t i) noexcept {
+    /// \throw Forwards `Alloc::realloc` exception
+    template <class Alloc>
+    void erase_branch(uint8_t i,
+                      Alloc& alloc) noexcept(noexcept(alloc.realloc(MemBlk{}, 0))) {
         assert(i < branches_count);
         assert(branches_count > 0);
         std::rotate(inner.begin() + i, inner.begin() + i + 1, inner.end());
-        auto const new_size = (inner.size() - 1) * sizeof(ErasedNode);
-        auto const ptr = std::realloc(inner.data(), new_size);
-        assert(ptr != nullptr);
-        inner = std::span{static_cast<ErasedNode*>(ptr), inner.size() - 1};
+        auto const old_size = inner.size() * sizeof(ErasedNode);
+        auto const new_size = old_size - sizeof(ErasedNode);
+        auto const blk = alloc.realloc(MemBlk{inner.data(), old_size}, new_size);
+        inner = std::span{static_cast<ErasedNode*>(blk.ptr), inner.size() - 1};
         branches_count -= 1;
     }
 
-    void* erase_value(uint8_t i) noexcept {
+    /// \throw Forwards `Alloc::realloc` exception
+    template <class Alloc>
+    void* erase_value(uint8_t i,
+                      Alloc& alloc) noexcept(noexcept(alloc.realloc(MemBlk{}, 0))) {
         assert(i < values_count);
         assert(values_count > 0);
 
@@ -491,10 +505,10 @@ public:
         values_count -= 1;
 
         if (values_count % 2 == 0) {
-            auto const new_size = (inner.size() - 1) * sizeof(ErasedNode);
-            auto const ptr = std::realloc(inner.data(), new_size);
-            assert(ptr != nullptr);
-            inner = std::span{static_cast<ErasedNode*>(ptr), inner.size() - 1};
+            auto const old_size = inner.size() * sizeof(ErasedNode);
+            auto const new_size = old_size - sizeof(ErasedNode);
+            auto const blk = alloc.realloc(MemBlk{inner.data(), old_size}, new_size);
+            inner = std::span{static_cast<ErasedNode*>(blk.ptr), inner.size() - 1};
         }
 
         return ret;
@@ -522,12 +536,16 @@ public:
         return ret;
     }
 
-    ErasedNode* data() noexcept {
+    ErasedNode* data() const noexcept {
         return inner.data();
     }
 
     uint8_t size() const noexcept {
         return branches_count + values_count;
+    }
+
+    size_t size_bytes() const noexcept {
+        return inner.size_bytes();
     }
 
     std::span<ErasedNode> get_inner() const noexcept {
@@ -594,7 +612,7 @@ public:
     void for_each_useless(auto f) noexcept {
         for (auto block = useless_head; block != nullptr;) {
             auto const next = block->block.next;
-            f(static_cast<void*>(block));
+            f(MemBlk{block, block->block.capacity * sizeof(Node)});
             block = next;
         }
     }
@@ -602,7 +620,7 @@ public:
     void for_each_free(auto f) noexcept {
         for (auto block = free_head; block != nullptr;) {
             auto const next = block->block.next;
-            f(static_cast<void*>(block));
+            f(MemBlk{block, block->block.capacity * sizeof(Node)});
             block = next;
         }
     }
@@ -653,25 +671,25 @@ template <class T>
 concept TrivialLittleObject = std::is_trivial_v<T> && sizeof(T) == 8;
 
 struct SystemAllocator {
-    void* realloc(void* ptr, size_t size) noexcept(false) {
-        if (auto const ret = std::realloc(ptr, size)) {
-            return ret;
+    MemBlk realloc(MemBlk blk, size_t size) noexcept(false) {
+        if (auto const ptr = std::realloc(blk.ptr, size)) {
+            return MemBlk{ptr, size};
         } else {
             throw std::bad_alloc();
         }
     }
 
-    void dealloc(void* ptr) noexcept {
-        std::free(ptr);
+    void dealloc(MemBlk blk) noexcept {
+        std::free(blk.ptr);
     }
 };
 
 template <class T>
 concept Allocator = std::is_nothrow_move_constructible_v<T>
                  && std::is_nothrow_move_assignable_v<T> && requires(T alloc) {
-                        { alloc.realloc(nullptr, 0) };
-                        { alloc.dealloc(nullptr) };
-                        noexcept(alloc.dealloc(nullptr));
+                        { alloc.realloc(MemBlk{}, 0) } -> std::convertible_to<MemBlk>;
+                        { alloc.dealloc(MemBlk{}) };
+                        noexcept(alloc.dealloc(MemBlk{}));
                     };
 
 template <UnsignedIntegral P, TrivialLittleObject T>
@@ -833,7 +851,7 @@ public:
     /// \throw Forwards `Alloc::realloc` exception
     std::optional<T> insert(P bits,
                             uint8_t len,
-                            T value) noexcept(noexcept(alloc_.realloc(nullptr, 0))) {
+                            T value) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
         detail::Node* node = &root_;
         detail::Bits<P> prefix{bits, len};
         find_leaf_branch(node, prefix, noop);
@@ -849,7 +867,7 @@ public:
     /// \throw Forwards `Alloc::realloc` exception
     std::optional<T> replace(P bits,
                              uint8_t len,
-                             T value) noexcept(noexcept(alloc_.realloc(nullptr, 0))) {
+                             T value) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
         detail::Node* node = &root_;
         detail::Bits<P> prefix{bits, len};
         find_leaf_branch(node, prefix, noop);
@@ -975,7 +993,9 @@ public:
 
     /// Erase exact prefix
     /// \pre `len <= sizeof(P) * CHAR_BIT`
-    bool erase_exact(P bits, uint8_t len) noexcept {
+    /// \throw Forwards `Alloc::realloc` exception
+    bool erase_exact(P bits,
+                     uint8_t len) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
         detail::Node* node = &root_;
         detail::Bits<P> prefix{bits, len};
 
@@ -998,7 +1018,7 @@ public:
             return true;
         }
 
-        vec.erase_value(vec_idx);
+        vec.erase_value(vec_idx, alloc_);
         node->children = vec.data();
         node->internal_bitmap.unset(prefix);
         size_ -= 1;
@@ -1024,8 +1044,8 @@ public:
                 stack.recycle(vec.get_inner());
             }
         }
-        stack.for_each_useless([this](auto ptr) { alloc_.dealloc(ptr); });
-        stack.for_each_free([this](auto ptr) { alloc_.dealloc(ptr); });
+        stack.for_each_useless([this](auto blk) { alloc_.dealloc(blk); });
+        stack.for_each_free([this](auto blk) { alloc_.dealloc(blk); });
     }
 
     Alloc& alloc() noexcept {
@@ -1062,7 +1082,7 @@ private:
     /// \post Strong exception guarantee
     /// \throw Forwards `Alloc::realloc` exception
     void extend_leaf(detail::Node*& node,
-                     detail::Bits<P>& prefix) noexcept(noexcept(alloc_.realloc(nullptr,
+                     detail::Bits<P>& prefix) noexcept(noexcept(alloc_.realloc(MemBlk{},
                                                                                0))) {
         while (prefix.len() >= detail::stride) {
             auto const slice = prefix.sub(0, detail::stride);
@@ -1083,7 +1103,8 @@ private:
     /// \throw Forwards `Alloc::realloc` exception
     void** match_exact_or_insert(detail::Node*& node,
                                  detail::Bits<P> slice,
-                                 T value) noexcept(noexcept(alloc_.realloc(nullptr, 0))) {
+                                 T value) noexcept(noexcept(alloc_.realloc(MemBlk{},
+                                                                           0))) {
         detail::NodeVec vec{
                 node->children,
                 node->external_bitmap.total(),
@@ -1104,7 +1125,9 @@ private:
     }
 
     /// \pre Exists
-    void erase_cleaning(P bits, uint8_t len) noexcept {
+    /// \throw Forwards `Alloc::realloc` exception
+    void erase_cleaning(P bits,
+                        uint8_t len) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
         assert(match_exact(bits, len).has_value());
 
         std::array<detail::Node*,
@@ -1120,7 +1143,10 @@ private:
             stack[level++] = &node;
         });
 
-        alloc_.dealloc(node->children);
+        detail::NodeVec const vec{node->children,
+                                  node->external_bitmap.total(),
+                                  node->internal_bitmap.total()};
+        alloc_.dealloc(MemBlk{vec.data(), vec.size_bytes()});
         node->children = nullptr;
         node->internal_bitmap = {};
         size_ -= 1;
@@ -1134,11 +1160,11 @@ private:
                                 node.internal_bitmap.total()};
 
             if (vec.size() < 2) {
-                alloc_.dealloc(stack[level]->children);
+                alloc_.dealloc(MemBlk{vec.data(), vec.size_bytes()});
                 node.children = nullptr;
                 node.external_bitmap = {};
             } else {
-                vec.erase_branch(node.external_bitmap.before(slice));
+                vec.erase_branch(node.external_bitmap.before(slice), alloc_);
                 node.children = vec.data();
                 node.external_bitmap.unset(slice);
                 break;

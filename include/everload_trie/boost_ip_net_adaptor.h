@@ -27,7 +27,6 @@
 
 #include <boost/asio/ip/network_v4.hpp>
 #include <boost/asio/ip/network_v6.hpp>
-
 #include <ostream>
 
 namespace everload_trie {
