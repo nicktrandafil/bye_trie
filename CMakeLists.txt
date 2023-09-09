@@ -70,6 +70,12 @@ if(${PROJECT_NAME}_TESTS)
     target_link_libraries(test_${PROJECT_NAME} Catch2::Catch2WithMain ${PROJECT_NAME})
     set_target_build_settings(test_${PROJECT_NAME})
     add_test(test_${PROJECT_NAME} test_${PROJECT_NAME})
+    add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/uniq_pfx_asn_dfz.csv
+        COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/data/uniq_pfx_asn_dfz.csv ${CMAKE_BINARY_DIR}
+        DEPENDS data/uniq_pfx_asn_dfz.csv
+    )
+    add_custom_target(data DEPENDS ${CMAKE_BINARY_DIR}/uniq_pfx_asn_dfz.csv)
+    add_dependencies(test_${PROJECT_NAME} data)
 endif()
 
 if(${PROJECT_NAME}_TESTS AND CMAKE_BUILD_TYPE STREQUAL "Debug")

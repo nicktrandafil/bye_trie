@@ -23,10 +23,12 @@
 */
 
 #include "bye_trie/bye_trie.h"
+#include "bye_trie/ip_net_bye_trie.h"
 
 #include <catch2/catch_all.hpp>
 
 #include <forward_list>
+#include <fstream>
 
 using namespace bye_trie;
 
@@ -51,5 +53,41 @@ TEST_CASE("Load big data and match every prefix", "[stress]") {
                 == (std::pair<uint8_t, long>{prefix.len(), value}));
         REQUIRE(*trie.find_exact(prefix) == (Value{prefix, value}));
         REQUIRE(*trie.find_longest(prefix) == (Value{prefix, value}));
+    }
+}
+
+static uint16_t parse_int(std::string_view view) {
+    uint16_t result = 0;
+    for (auto const c : view) {
+        result *= 10;
+        result += c - '0';
+    }
+    return result;
+}
+
+TEST_CASE("Real data test", "[stress]") {
+    std::vector<std::pair<boost::asio::ip::network_v4, uint16_t>> prefixes;
+    IpNetV4ByeTrie<long> trie;
+
+    std::ifstream file("uniq_pfx_asn_dfz.csv");
+    std::string line;
+    while (std::getline(file, line)) {
+        auto const view = std::string_view{line};
+        auto const addr_end = view.find(',');
+        auto const addr = boost::asio::ip::make_address_v4(view.substr(0, addr_end));
+
+        auto const len_end = view.substr(addr_end + 1).find(',');
+        auto const len = parse_int(view.substr(addr_end + 1, len_end));
+
+        auto const asn = parse_int(view.substr(addr_end + 1 + len_end + 1));
+
+        auto const prefix = boost::asio::ip::make_network_v4(addr, len);
+
+        prefixes.emplace_back(prefix, asn);
+    }
+
+    for (auto const& [prefix, value] : prefixes) {
+        INFO(prefix);
+        REQUIRE(!trie.insert(prefix, value).has_value());
     }
 }
