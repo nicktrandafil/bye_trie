@@ -843,7 +843,6 @@ public:
     }
 
     /// Insert only if the exact prefix is not present
-    /// \pre `len <= sizeof(P) * CHAR_BITS`
     /// \post Strong exception guarantee
     /// \return Existing value
     /// \throw Forwards `Alloc::realloc` exception
@@ -857,7 +856,6 @@ public:
     }
 
     /// Replace the exact prefix is present otherwise insert
-    /// \pre `len <= sizeof(P) * CHAR_BITS`
     /// \post Strong exception guarantee
     /// \return Previous value
     /// \throw Forwards `Alloc::realloc` exception
@@ -877,7 +875,6 @@ public:
     }
 
     /// Match exact prefix
-    /// \pre `len <= sizeof(P) * CHAR_BIT`
     std::optional<T> match_exact(Bits<P> prefix) const noexcept {
         detail::Node* node = &root_;
 
@@ -898,7 +895,6 @@ public:
     }
 
     /// Counterpart of `match_exact` which returns an iterator
-    /// \pre `len <= sizeof(P) * CHAR_BIT`
     /// \throw std::bad_alloc
     Iterator<P, T> find_exact(Bits<P> prefix) const noexcept(false) {
         detail::Node* node = &root_;
@@ -918,7 +914,6 @@ public:
     }
 
     /// Match longest prefix
-    /// \pre `len <= sizeof(P) * CHAR_BIT`
     std::optional<std::pair<uint8_t, T>> match_longest(Bits<P> prefix) const noexcept {
         detail::Node* node = &root_;
 
