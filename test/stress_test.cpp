@@ -73,7 +73,7 @@ static inline __attribute__((always_inline)) void do_not_optimize(T&& value) noe
 
 TEST_CASE("Real data test", "[stress]") {
     std::vector<std::pair<boost::asio::ip::network_v4, uint16_t>> prefixes;
-    IpNetV4ByeTrie<long> trie;
+    ByeTrieV4<long> trie;
 
     std::ifstream file("uniq_pfx_asn_dfz.csv");
     std::string line;
@@ -92,16 +92,23 @@ TEST_CASE("Real data test", "[stress]") {
         prefixes.emplace_back(prefix, asn);
     }
 
+    auto start = std::chrono::steady_clock::now();
     for (auto const& [prefix, value] : prefixes) {
-        INFO(prefix);
         trie.insert(prefix, value).has_value();
     }
 
+    std::cout << "insert time average ns: "
+              << std::chrono::duration_cast<std::chrono::nanoseconds>(
+                         std::chrono::steady_clock::now() - start)
+                                 .count()
+                         / static_cast<unsigned>(prefixes.size())
+              << '\n';
+
+    start = std::chrono::steady_clock::now();
     {
         auto inet_max = 255u;
         auto len_max = 32u;
 
-        auto const start = std::chrono::steady_clock::now();
         for (auto i_net = 0u; i_net <= inet_max; ++i_net) {
             for (unsigned short s_len = 0; s_len <= len_max; ++s_len) {
                 for (auto ii_net = 0u; ii_net <= inet_max; ++ii_net) {
@@ -121,6 +128,6 @@ TEST_CASE("Real data test", "[stress]") {
         auto const ns =
                 std::chrono::duration_cast<std::chrono::nanoseconds>(dur).count() / n;
 
-        std::cout << "ns: " << ns << '\n';
+        std::cout << "match longest average ns: " << ns << '\n';
     }
 }
