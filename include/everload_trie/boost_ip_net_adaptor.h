@@ -119,8 +119,8 @@ public:
         return value_type{
                 PrefixType(AddressType(
                                    std::bit_cast<BytesType>(detail::reverse_bits_of_bytes(
-                                           std::bit_cast<BytesType>(val.bits)))),
-                           val.len),
+                                           std::bit_cast<BytesType>(val.prefix.bits())))),
+                           val.prefix.len()),
                 val.value,
         };
     }
@@ -152,30 +152,32 @@ public:
     using ValueType = typename IteratorAdaptor<IpNetType, IntType, T>::value_type;
 
     auto insert(IpNetTypeCopyOptimized prefix,
-                T value) noexcept(noexcept(Base::insert({}, {}, {}))) {
-        return Base::insert(detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
-                            static_cast<uint8_t>(prefix.prefix_length()),
-                            value);
+                T value) noexcept(noexcept(Base::insert({}, {}))) {
+        return Base::insert(
+                Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
+                     static_cast<uint8_t>(prefix.prefix_length())},
+                value);
     }
 
     auto replace(IpNetTypeCopyOptimized prefix,
-                 T value) noexcept(noexcept(Base::replace({}, {}, {}))) {
-        return Base::replace(detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
-                             static_cast<uint8_t>(prefix.prefix_length()),
-                             value);
+                 T value) noexcept(noexcept(Base::replace({}, {}))) {
+        return Base::replace(
+                Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
+                     static_cast<uint8_t>(prefix.prefix_length())},
+                value);
     }
 
     auto match_exact(IpNetTypeCopyOptimized prefix) const noexcept {
         return Base::match_exact(
-                detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
-                static_cast<uint8_t>(prefix.prefix_length()));
+                Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
+                     static_cast<uint8_t>(prefix.prefix_length())});
     }
 
     std::optional<std::pair<IpNetType, T>> match_longest(
             IpNetTypeCopyOptimized prefix) const noexcept {
         auto const res = Base::match_longest(
-                detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
-                static_cast<uint8_t>(prefix.prefix_length()));
+                Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
+                     static_cast<uint8_t>(prefix.prefix_length())});
 
         if (!res) {
             return std::nullopt;
@@ -189,15 +191,15 @@ public:
     IteratorAdaptor<IpNetType, IntType, T> find_exact(IpNetTypeCopyOptimized prefix) const
             noexcept(false) {
         return IteratorAdaptor<IpNetType, IntType, T>{Base::find_exact(
-                detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
-                static_cast<uint8_t>(prefix.prefix_length()))};
+                Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
+                     static_cast<uint8_t>(prefix.prefix_length())})};
     }
 
     IteratorAdaptor<IpNetType, IntType, T> find_longest(
             IpNetTypeCopyOptimized prefix) const noexcept(false) {
         return IteratorAdaptor<IpNetType, IntType, T>{Base::find_longest(
-                detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
-                static_cast<uint8_t>(prefix.prefix_length()))};
+                Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
+                     static_cast<uint8_t>(prefix.prefix_length())})};
     }
 
     IteratorAdaptor<IpNetType, IntType, T> begin() const noexcept(false) {

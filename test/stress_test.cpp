@@ -25,35 +25,30 @@
 #include "everload_trie/trie.h"
 
 #include <catch2/catch_all.hpp>
-
 #include <forward_list>
 
 using namespace everload_trie;
 
 TEST_CASE("Load big data and match every prefix", "[stress]") {
-    std::forward_list<std::pair<detail::Bits<uint32_t>, uint32_t>> prefixes;
+    std::forward_list<std::pair<Bits<uint32_t>, uint32_t>> prefixes;
     BitsTrie<uint32_t, long> trie;
     using Value = BitsTrie<uint32_t, long>::ValueType;
 
     uint32_t i = 0;
-    detail::Bits<uint32_t> bits{4, 8};
+    Bits<uint32_t> bits{4, 8};
     while (i < 65'000) {
         prefixes.emplace_front(bits, i);
-        REQUIRE(!trie.insert(prefixes.front().first.value(),
-                             prefixes.front().first.len(),
-                             prefixes.front().second)
+        REQUIRE(!trie.insert(prefixes.front().first, prefixes.front().second)
                          .has_value());
         ++i;
         bits += 32;
     }
 
     for (auto const& [prefix, value] : prefixes) {
-        REQUIRE(*trie.match_exact(prefix.value(), prefix.len()) == value);
-        REQUIRE(*trie.match_longest(prefix.value(), prefix.len())
+        REQUIRE(*trie.match_exact(prefix) == value);
+        REQUIRE(*trie.match_longest(prefix)
                 == (std::pair<uint8_t, long>{prefix.len(), value}));
-        REQUIRE(*trie.find_exact(prefix.value(), prefix.len())
-                == (Value{prefix.bits(), prefix.len(), value}));
-        REQUIRE(*trie.find_longest(prefix.value(), prefix.len())
-                == (Value{prefix.bits(), prefix.len(), value}));
+        REQUIRE(*trie.find_exact(prefix) == (Value{prefix, value}));
+        REQUIRE(*trie.find_longest(prefix) == (Value{prefix, value}));
     }
 }

@@ -33,26 +33,25 @@ using namespace everload_trie;
 using PrefixTypes = std::tuple<uint32_t, uint64_t>;
 
 TEMPLATE_LIST_TEST_CASE("", "[Bits][concatenated]", PrefixTypes) {
-    detail::Bits<TestType> slice(0b1100, 4);
+    Bits<TestType> slice(0b1100, 4);
     REQUIRE(slice.concatenated({0, 0}).value() == 0b1100);
     REQUIRE(static_cast<unsigned>(slice.concatenated({1, 1}).value()) == 0b11100);
 }
 
 TEST_CASE("", "[Bits][operator+=(T)]") {
-    detail::Bits<uint8_t> bits;
+    Bits<uint8_t> bits;
     bits += 1;
-    REQUIRE(bits == detail::Bits<uint8_t>{0, 1});
+    REQUIRE(bits == Bits<uint8_t>{0, 1});
     bits += 2;
-    REQUIRE(bits == detail::Bits<uint8_t>{0, 2});
+    REQUIRE(bits == Bits<uint8_t>{0, 2});
     bits += 2;
-    REQUIRE(bits == detail::Bits<uint8_t>{2, 2});
+    REQUIRE(bits == Bits<uint8_t>{2, 2});
     bits += 3;
-    REQUIRE(bits == detail::Bits<uint8_t>{0, 3});
+    REQUIRE(bits == Bits<uint8_t>{0, 3});
 }
 
 TEST_CASE("", "[ExternalBitmap][exists][before]") {
     detail::ExternalBitmap bitmap(0b110);
-    using detail::Bits;
     REQUIRE(!bitmap.exists(Bits{0, 5}));
     REQUIRE(bitmap.exists(Bits{1, 5}));
     REQUIRE(bitmap.before(Bits{0, 5}) == 0);
@@ -64,54 +63,53 @@ TEST_CASE("", "[ExternalBitmap][exists][before]") {
 
 TEST_CASE("", "[InternalBitmap][set][unset][exists]") {
     detail::InternalBitmap bitmap(0b0'1000000000001010'10000010'1001'10'1);
-    using detail::Bits;
     SECTION("4 length") {
         uint8_t idx;
-        REQUIRE(!bitmap.exists(idx, detail::Bits{14, 4}));
+        REQUIRE(!bitmap.exists(idx, Bits{14, 4}));
         bitmap.set(Bits{14, 4});
-        REQUIRE(bitmap.exists(idx, detail::Bits{14, 4}));
+        REQUIRE(bitmap.exists(idx, Bits{14, 4}));
         REQUIRE(idx == 8);
         bitmap.unset(Bits{14, 4});
-        REQUIRE(!bitmap.exists(idx, detail::Bits{14, 4}));
+        REQUIRE(!bitmap.exists(idx, Bits{14, 4}));
     }
 
     SECTION("3 length") {
         uint8_t idx;
-        REQUIRE(!bitmap.exists(idx, detail::Bits{6, 3}));
+        REQUIRE(!bitmap.exists(idx, Bits{6, 3}));
         bitmap.set(Bits{6, 3});
-        REQUIRE(bitmap.exists(idx, detail::Bits{6, 3}));
+        REQUIRE(bitmap.exists(idx, Bits{6, 3}));
         REQUIRE(idx == 5);
         bitmap.unset(Bits{6, 3});
-        REQUIRE(!bitmap.exists(idx, detail::Bits{6, 3}));
+        REQUIRE(!bitmap.exists(idx, Bits{6, 3}));
     }
 
     SECTION("2 length") {
         uint8_t idx;
-        REQUIRE(!bitmap.exists(idx, detail::Bits{2, 2}));
+        REQUIRE(!bitmap.exists(idx, Bits{2, 2}));
         bitmap.set(Bits{2, 2});
-        REQUIRE(bitmap.exists(idx, detail::Bits{2, 2}));
+        REQUIRE(bitmap.exists(idx, Bits{2, 2}));
         REQUIRE(idx == 3);
         bitmap.unset(Bits{2, 2});
-        REQUIRE(!bitmap.exists(idx, detail::Bits{2, 2}));
+        REQUIRE(!bitmap.exists(idx, Bits{2, 2}));
     }
 
     SECTION("1 length") {
         uint8_t idx;
-        REQUIRE(!bitmap.exists(idx, detail::Bits{0, 1}));
+        REQUIRE(!bitmap.exists(idx, Bits{0, 1}));
         bitmap.set(Bits{0, 1});
-        REQUIRE(bitmap.exists(idx, detail::Bits{0, 1}));
+        REQUIRE(bitmap.exists(idx, Bits{0, 1}));
         REQUIRE(idx == 1);
         bitmap.unset(Bits{0, 1});
-        REQUIRE(!bitmap.exists(idx, detail::Bits{0, 1}));
+        REQUIRE(!bitmap.exists(idx, Bits{0, 1}));
     }
 
     SECTION("0 length") {
         uint8_t idx;
-        REQUIRE(bitmap.exists(idx, detail::Bits{0, 0}));
+        REQUIRE(bitmap.exists(idx, Bits{0, 0}));
         bitmap.unset(Bits{0, 0});
-        REQUIRE(!bitmap.exists(idx, detail::Bits{0, 0}));
+        REQUIRE(!bitmap.exists(idx, Bits{0, 0}));
         bitmap.set(Bits{0, 0});
-        REQUIRE(bitmap.exists(idx, detail::Bits{0, 0}));
+        REQUIRE(bitmap.exists(idx, Bits{0, 0}));
         REQUIRE(idx == 0);
     }
 }
@@ -119,7 +117,6 @@ TEST_CASE("", "[InternalBitmap][set][unset][exists]") {
 TEST_CASE("", "[InternalBitmap][longest_before]") {
     detail::InternalBitmap bitmap(0b0'1000000000001010'10000010'1001'10'1);
     uint8_t idx;
-    using detail::Bits;
 
     SECTION("4") {
         SECTION("match") {
@@ -288,31 +285,31 @@ TEST_CASE("Insert values", "[BitsTrie][insert]") {
 
     SECTION("No branching") {
         SECTION("insert the first value") {
-            REQUIRE(trie.insert(1, 4, 1) == std::nullopt);
+            REQUIRE(trie.insert(Bits{1u, 4}, 1) == std::nullopt);
             SECTION("value already exists") {
-                REQUIRE(*trie.insert(1, 4, 100) == 1);
+                REQUIRE(*trie.insert(Bits{1u, 4}, 100) == 1);
             }
 
             SECTION("insert a value before") {
-                REQUIRE(trie.insert(0, 4, 2) == std::nullopt);
+                REQUIRE(trie.insert(Bits{0u, 4}, 2) == std::nullopt);
                 SECTION("value already exists") {
-                    REQUIRE(*trie.insert(0, 4, 100) == 2);
+                    REQUIRE(*trie.insert(Bits{0u, 4}, 100) == 2);
                 }
             }
 
             SECTION("insert a value after") {
-                REQUIRE(trie.insert(2, 4, 2) == std::nullopt);
+                REQUIRE(trie.insert(Bits{2u, 4}, 2) == std::nullopt);
                 SECTION("value already exists") {
-                    REQUIRE(*trie.insert(2, 4, 100) == 2);
+                    REQUIRE(*trie.insert(Bits{2u, 4}, 100) == 2);
                 }
             }
 
             SECTION("insert a value between") {
-                REQUIRE(trie.insert(4, 4, 2) == std::nullopt);
-                REQUIRE(trie.insert(3, 4, 3) == std::nullopt);
+                REQUIRE(trie.insert(Bits{4u, 4}, 2) == std::nullopt);
+                REQUIRE(trie.insert(Bits{3u, 4}, 3) == std::nullopt);
                 SECTION("values already exist") {
-                    REQUIRE(*trie.insert(4, 4, 100) == 2);
-                    REQUIRE(*trie.insert(3, 4, 100) == 3);
+                    REQUIRE(*trie.insert(Bits{4u, 4}, 100) == 2);
+                    REQUIRE(*trie.insert(Bits{3u, 4}, 100) == 3);
                 }
             }
         }
@@ -320,169 +317,169 @@ TEST_CASE("Insert values", "[BitsTrie][insert]") {
 
     SECTION("Branching") {
         SECTION("insert the first branch") {
-            REQUIRE(trie.insert(0b0000'00001, 6, 1) == std::nullopt);
+            REQUIRE(trie.insert(Bits{0b0000'00001u, 6}, 1) == std::nullopt);
             SECTION("value already exists") {
-                REQUIRE(*trie.insert(0b0000'00001, 6, 100) == 1);
+                REQUIRE(*trie.insert(Bits{0b0000'00001u, 6}, 100) == 1);
             }
 
             SECTION("insert a branch before") {
-                REQUIRE(trie.insert(0b0000'0000, 6, 2) == std::nullopt);
+                REQUIRE(trie.insert(Bits{0b0000'0000u, 6}, 2) == std::nullopt);
                 SECTION("value already exists") {
-                    REQUIRE(*trie.insert(0b0000'0000, 6, 100) == 2);
+                    REQUIRE(*trie.insert(Bits{0b0000'0000u, 6}, 100) == 2);
                 }
             }
 
             SECTION("insert a branch after") {
-                REQUIRE(trie.insert(0b0000'00010, 6, 2) == std::nullopt);
+                REQUIRE(trie.insert(Bits{0b0000'00010u, 6}, 2) == std::nullopt);
                 SECTION("value already exists") {
-                    REQUIRE(*trie.insert(0b0000'00010, 6, 100) == 2);
+                    REQUIRE(*trie.insert(Bits{0b0000'00010u, 6}, 100) == 2);
                 }
             }
 
             SECTION("insert a branch between") {
-                REQUIRE(trie.insert(0b0000'00100, 6, 2) == std::nullopt);
-                REQUIRE(trie.insert(0b0000'00011, 6, 3) == std::nullopt);
+                REQUIRE(trie.insert(Bits{0b0000'00100u, 6}, 2) == std::nullopt);
+                REQUIRE(trie.insert(Bits{0b0000'00011u, 6}, 3) == std::nullopt);
                 SECTION("values already exist") {
-                    REQUIRE(*trie.insert(0b0000'00100, 6, 100) == 2);
-                    REQUIRE(*trie.insert(0b0000'00011, 6, 100) == 3);
+                    REQUIRE(*trie.insert(Bits{0b0000'00100u, 6}, 100) == 2);
+                    REQUIRE(*trie.insert(Bits{0b0000'00011u, 6}, 100) == 3);
                 }
             }
         }
     }
 
     SECTION("Longest") {
-        REQUIRE(trie.insert(0xffffffff, 32, 0) == std::nullopt);
-        REQUIRE(trie.match_exact(0xffffffff, 32) == 0);
+        REQUIRE(trie.insert(Bits{0xffffffffu, 32}, 0) == std::nullopt);
+        REQUIRE(trie.match_exact(Bits{0xffffffffu, 32}) == 0);
     }
 }
 
 TEST_CASE("", "[BitsTrie][replace]") {
-    everload_trie::BitsTrie<uint32_t, long> trie;
-    REQUIRE(trie.replace(0b0'00001, 6, 1) == std::nullopt);
-    REQUIRE(trie.replace(0b0'00001, 6, 2) == 1);
-    REQUIRE(trie.replace(0b0'00001, 6, 3) == 2);
+   everload_trie::BitsTrie<uint32_t, long> trie;
+   REQUIRE(trie.replace(Bits{0b0'00001u, 6}, 1) == std::nullopt);
+   REQUIRE(trie.replace(Bits{0b0'00001u, 6}, 2) == 1);
+   REQUIRE(trie.replace(Bits{0b0'00001u, 6}, 3) == 2);
 }
 
 TEST_CASE("Match exact prefixes", "[BitsTrie][match_exact]") {
     everload_trie::BitsTrie<uint32_t, long> trie;
 
     SECTION("positive") {
-        trie.insert(0, 4, 0);
-        trie.insert(1, 4, 1);
-        trie.insert(2, 4, 2);
+        trie.insert(Bits{0u, 4}, 0);
+        trie.insert(Bits{1u, 4}, 1);
+        trie.insert(Bits{2u, 4}, 2);
 
-        trie.insert(0b0000'00001, 6, 3);
-        trie.insert(0b0000'00010, 6, 4);
-        trie.insert(0b0000'00100, 6, 5);
+        trie.insert(Bits{0b0000'00001u, 6}, 3);
+        trie.insert(Bits{0b0000'00010u, 6}, 4);
+        trie.insert(Bits{0b0000'00100u, 6}, 5);
 
         SECTION("level 0") {
-            REQUIRE(*trie.match_exact(0, 4) == 0);
-            REQUIRE(*trie.match_exact(1, 4) == 1);
-            REQUIRE(*trie.match_exact(2, 4) == 2);
+            REQUIRE(*trie.match_exact(Bits{0u, 4}) == 0);
+            REQUIRE(*trie.match_exact(Bits{1u, 4}) == 1);
+            REQUIRE(*trie.match_exact(Bits{2u, 4}) == 2);
         }
 
         SECTION("level 1") {
-            REQUIRE(*trie.match_exact(0b0000'00001, 6) == 3);
-            REQUIRE(*trie.match_exact(0b0000'00010, 6) == 4);
-            REQUIRE(*trie.match_exact(0b0000'00100, 6) == 5);
+            REQUIRE(*trie.match_exact(Bits{0b0000'00001u, 6}) == 3);
+            REQUIRE(*trie.match_exact(Bits{0b0000'00010u, 6}) == 4);
+            REQUIRE(*trie.match_exact(Bits{0b0000'00100u, 6}) == 5);
         }
     }
 
     SECTION("negative basic") {
-        trie.insert(0, 4, 0);
-        REQUIRE(trie.match_exact(0, 5) == std::nullopt);
-        REQUIRE(trie.match_exact(1, 4) == std::nullopt);
+        trie.insert(Bits{0u, 4}, 0);
+        REQUIRE(trie.match_exact(Bits{0u, 5}) == std::nullopt);
+        REQUIRE(trie.match_exact(Bits{1u, 4}) == std::nullopt);
     }
 }
 
 TEST_CASE("Match longest prefixes", "[BitsTrie][match_longest]", ) {
     everload_trie::BitsTrie<uint32_t, long> trie;
-    trie.insert(0b0000, 4, 0);
-    trie.insert(0b001, 3, 1);
-    trie.insert(0b0000'00001, 6, 2);
+    trie.insert(Bits{0b0000u, 4}, 0);
+    trie.insert(Bits{0b001u, 3}, 1);
+    trie.insert(Bits{0b0000'00001u, 6}, 2);
 
     SECTION("positive") {
         SECTION("exact") {
-            auto const [len, value] = *trie.match_longest(0b10000, 5);
+            auto const [len, value] = *trie.match_longest(Bits{0b10000u, 5});
             REQUIRE(len == 4);
             REQUIRE(value == 0);
         }
 
         SECTION("4 longest bits, the same level") {
-            auto const [len, value] = *trie.match_longest(0b00000, 5);
+            auto const [len, value] = *trie.match_longest(Bits{0b00000u, 5});
             REQUIRE(len == 4);
             REQUIRE(value == 0);
         }
 
         SECTION("3 longest bits, previous level") {
-            auto const [len, value] = *trie.match_longest(0b00'10001, 7);
+            auto const [len, value] = *trie.match_longest(Bits{0b00'10001u, 7});
             REQUIRE(len == 3);
             REQUIRE(value == 1);
         }
 
         SECTION("6 longest bits, the same level") {
-            auto const [len, value] = *trie.match_longest(0b10'00001, 7);
+            auto const [len, value] = *trie.match_longest(Bits{0b10'00001u, 7});
             REQUIRE(len == 6);
             REQUIRE(value == 2);
         }
     }
 
     SECTION("negative basic") {
-        REQUIRE(!trie.match_longest(0b00010, 5));
-        REQUIRE(!trie.match_longest(0b11000, 5));
+        REQUIRE(!trie.match_longest(Bits{0b00010u, 5}));
+        REQUIRE(!trie.match_longest(Bits{0b11000u, 5}));
     }
 }
 
 TEST_CASE("Erase values", "[BitsTrie][erase_exact]") {
-    SECTION("Not found") {
-        everload_trie::BitsTrie<uint32_t, long> trie;
-        REQUIRE(!trie.erase_exact(0, 5));
-        REQUIRE(!trie.erase_exact(0, 4));
-    }
-    SECTION("No unfold-cleaning") {
-        everload_trie::BitsTrie<uint32_t, long> trie;
-        trie.insert(0b0'00000'00000, 11, 0);
-        trie.insert(0b1'00000'00000, 11, 1);
-        REQUIRE(trie.erase_exact(0b0'00000'00000, 11));
-        REQUIRE(trie.size() == 1);
-        REQUIRE(*trie.match_exact(0b1'00000'00000, 11) == 1);
-    }
-    SECTION("Unfold-cleaning just the leaf which contains the value") {
-        everload_trie::BitsTrie<uint32_t, long> trie;
-        trie.insert(0b0'00000'00000, 11, 0);
-        trie.insert(0b0'00000, 6, 1);
-        REQUIRE(trie.erase_exact(0b0'00000'00000, 11));
-        REQUIRE(trie.size() == 1);
-        REQUIRE(*trie.match_exact(0b0'00000, 6) == 1);
-    }
-    SECTION("bug case of confusion of external bitmap index in unfold-cleaning") {
-        everload_trie::BitsTrie<uint32_t, long> trie;
-        trie.insert(0b0'00001'00000, 11, 0);
-        trie.insert(0b0'00000, 6, 1);
-        REQUIRE(trie.erase_exact(0b0'00001'00000, 11));
-        REQUIRE(trie.size() == 1);
-        REQUIRE(*trie.match_exact(0b0'00000, 6) == 1);
-    }
-    SECTION("Unfold-cleaning the branch up to the root") {
-        everload_trie::BitsTrie<uint32_t, long> trie;
-        trie.insert(0b0'00000'00000, 11, 0);
-        REQUIRE(trie.erase_exact(0b0'00000'00000, 11));
-        REQUIRE(trie.size() == 0);
-    }
-    SECTION("Unfold-cleaning the branch in case there is just root node") {
-        everload_trie::BitsTrie<uint32_t, long> trie;
-        trie.insert(0b0001, 4, 0);
-        REQUIRE(trie.erase_exact(0b0001, 4));
-        REQUIRE(trie.size() == 0);
-    }
-    SECTION("node vec index is not equal to stride_m_1") {
-        everload_trie::BitsTrie<uint32_t, long> trie;
-        trie.insert(1, 2, 0);
-        trie.insert(2, 2, 1);
-        trie.erase_exact(2, 2);
-        REQUIRE(trie.size() == 1);
-        REQUIRE(trie.match_exact(1, 2) == 0);
-    }
+   SECTION("Not found") {
+       everload_trie::BitsTrie<uint32_t, long> trie;
+       REQUIRE(!trie.erase_exact(Bits{0u, 5}));
+       REQUIRE(!trie.erase_exact(Bits{0u, 4}));
+   }
+   SECTION("No unfold-cleaning") {
+       everload_trie::BitsTrie<uint32_t, long> trie;
+       trie.insert(Bits{0b0'00000'00000u, 11}, 0);
+       trie.insert(Bits{0b1'00000'00000u, 11}, 1);
+       REQUIRE(trie.erase_exact(Bits{0b0'00000'00000u, 11}));
+       REQUIRE(trie.size() == 1);
+       REQUIRE(*trie.match_exact(Bits{0b1'00000'00000u, 11}) == 1);
+   }
+   SECTION("Unfold-cleaning just the leaf which contains the value") {
+       everload_trie::BitsTrie<uint32_t, long> trie;
+       trie.insert(Bits{0b0'00000'00000u, 11}, 0);
+       trie.insert(Bits{0b0'00000u, 6}, 1);
+       REQUIRE(trie.erase_exact(Bits{0b0'00000'00000u, 11}));
+       REQUIRE(trie.size() == 1);
+       REQUIRE(*trie.match_exact(Bits{0b0'00000u, 6}) == 1);
+   }
+   SECTION("bug case of confusion of external bitmap index in unfold-cleaning") {
+       everload_trie::BitsTrie<uint32_t, long> trie;
+       trie.insert(Bits{0b0'00001'00000u, 11}, 0);
+       trie.insert(Bits{0b0'00000u, 6}, 1);
+       REQUIRE(trie.erase_exact(Bits{0b0'00001'00000u, 11}));
+       REQUIRE(trie.size() == 1);
+       REQUIRE(*trie.match_exact(Bits{0b0'00000u, 6}) == 1);
+   }
+   SECTION("Unfold-cleaning the branch up to the root") {
+       everload_trie::BitsTrie<uint32_t, long> trie;
+       trie.insert(Bits{0b0'00000'00000u, 11}, 0);
+       REQUIRE(trie.erase_exact(Bits{0b0'00000'00000u, 11}));
+       REQUIRE(trie.size() == 0);
+   }
+   SECTION("Unfold-cleaning the branch in case there is just root node") {
+       everload_trie::BitsTrie<uint32_t, long> trie;
+       trie.insert(Bits{0b0001u, 4}, 0);
+       REQUIRE(trie.erase_exact(Bits{0b0001u, 4}));
+       REQUIRE(trie.size() == 0);
+   }
+   SECTION("node vec index is not equal to stride_m_1") {
+       everload_trie::BitsTrie<uint32_t, long> trie;
+       trie.insert(Bits{1u, 2}, 0);
+       trie.insert(Bits{2u, 2}, 1);
+       trie.erase_exact(Bits{2u, 2});
+       REQUIRE(trie.size() == 1);
+       REQUIRE(trie.match_exact(Bits{1u, 2}) == 0);
+   }
 }
 
 TEST_CASE("", "[RecyclingStack]") {
@@ -557,24 +554,24 @@ TEST_CASE("Exception guarantee", "[BitsTrie][insert]") {
 
     SECTION("useless branches get freed") {
         BitsTrie<uint32_t, long, Alloc> trie(Alloc{2});
-        REQUIRE_THROWS_AS(trie.insert(0b0'00000'00000, 11, 0), std::bad_alloc);
+        REQUIRE_THROWS_AS(trie.insert(Bits{0b0'00000'00000u, 11}, 0), std::bad_alloc);
     }
 
     SECTION("can insert on a useless branch") {
         BitsTrie<uint32_t, long, Alloc> trie(Alloc{2});
-        REQUIRE_THROWS_AS(trie.insert(0b0'00000'00000, 11, 0), std::bad_alloc);
-        REQUIRE(trie.insert(0b0'00000'00000, 11, 0) == std::nullopt);
-        REQUIRE(trie.match_exact(0b0'00000'00000, 11) == 0);
+        REQUIRE_THROWS_AS(trie.insert(Bits{0b0'00000'00000u, 11}, 0), std::bad_alloc);
+        REQUIRE(trie.insert(Bits{0b0'00000'00000u, 11}, 0) == std::nullopt);
+        REQUIRE(trie.match_exact(Bits{0b0'00000'00000u, 11}) == 0);
     }
 
     SECTION("try overflow RecyclingVec") {
         BitsTrie<uint32_t, long, Alloc> trie(Alloc{});
         for (auto i = 0u; i < 32; ++i) {
             trie.alloc().tickets = 6;
-            REQUIRE_THROWS_AS(trie.insert(i, 32, 0), std::bad_alloc);
+            REQUIRE_THROWS_AS(trie.insert(Bits{i, 32}, 0), std::bad_alloc);
         }
         for (auto i = 0u; i < 32; ++i) {
-            trie.insert(i << 5, 27, 0);
+            trie.insert(Bits{i << 5, 27}, 0);
         }
     }
 }
@@ -585,13 +582,13 @@ TEST_CASE("Iteration", "[BitsTrie]") {
     BitsTrie trie;
 
     SECTION("0/0 exists, begin() doesn't seek the first prefix") {
-        trie.insert(0, 0, 1);
-        REQUIRE((*trie.begin() == Value{0, 0, 1}));
+        trie.insert(Bits{0u, 0}, 1);
+        REQUIRE((*trie.begin() == Value{Bits{0u, 0}, 1}));
     }
 
     SECTION("0/0 doesn't exist, begin() seeks the first prefix") {
-        trie.insert(0, 1, 1);
-        REQUIRE((*trie.begin() == Value{0, 1, 1}));
+        trie.insert(Bits{0u, 1}, 1);
+        REQUIRE((*trie.begin() == Value{Bits{0u, 1}, 1}));
     }
 
     SECTION("empty BitsTrie, begin() == end()") {
@@ -599,63 +596,63 @@ TEST_CASE("Iteration", "[BitsTrie]") {
     }
 
     SECTION("not empty, begin() != end()") {
-        trie.insert(0, 1, 1);
+        trie.insert(Bits{0u, 1}, 1);
         REQUIRE((trie.begin() != trie.end()));
     }
 
     SECTION("increment reaches next element") {
-        trie.insert(0, 0, 1);
-        trie.insert(0, 1, 2);
-        REQUIRE((*++trie.begin() == Value{0, 1, 2}));
+        trie.insert(Bits{0u, 0}, 1);
+        trie.insert(Bits{0u, 1}, 2);
+        REQUIRE((*++trie.begin() == Value{Bits{0u, 1}, 2}));
     }
 
     SECTION("increment reaches end") {
-        trie.insert(0, 0, 1);
+        trie.insert(Bits{0u, 0}, 1);
         REQUIRE(++trie.begin() == trie.end());
     }
 
     SECTION("iterate within node") {
-        trie.insert(0, 1, 1);
-        trie.insert(0, 2, 2);
-        trie.insert(0, 3, 3);
-        trie.insert(0, 4, 4);
+        trie.insert(Bits{0u, 1}, 1);
+        trie.insert(Bits{0u, 2}, 2);
+        trie.insert(Bits{0u, 3}, 3);
+        trie.insert(Bits{0u, 4}, 4);
         std::vector<Value> values;
         for (auto const x : trie) {
             values.push_back(x);
         }
         std::vector<Value> const expected{
-                Value{0, 1, 1}, Value{0, 2, 2}, Value{0, 3, 3}, Value{0, 4, 4}};
+                Value{Bits{0u, 1}, 1}, Value{Bits{0u, 2}, 2}, Value{Bits{0u, 3}, 3}, Value{Bits{0u, 4}, 4}};
         REQUIRE(values == expected);
     }
 
     SECTION("node does not have prefixes, but the next node has") {
-        trie.insert(0, 5, 1);
-        trie.insert(0, 6, 2);
-        REQUIRE((*trie.begin() == Value{0, 5, 1}));
-        REQUIRE((*++trie.begin() == Value{0, 6, 2}));
+        trie.insert(Bits{0u, 5}, 1);
+        trie.insert(Bits{0u, 6}, 2);
+        REQUIRE((*trie.begin() == Value{Bits{0u, 5}, 1}));
+        REQUIRE((*++trie.begin() == Value{Bits{0u, 6}, 2}));
         REQUIRE((++ ++trie.begin() == trie.end()));
     }
 
     SECTION("iterator comparison") {
-        trie.insert(0xfffffff0, 32, 1);
-        trie.insert(0xfffffff1, 32, 2);
+        trie.insert(Bits{0xfffffff0u, 32}, 1);
+        trie.insert(Bits{0xfffffff1u, 32}, 2);
         REQUIRE(++trie.begin() == ++trie.begin());
     }
 
     SECTION("iterate a subnet") {
-        trie.insert(0x00ffffff, 24, 1);
-        trie.insert(0x01ffffff, 32, 2);
-        trie.insert(0x03ffffff, 32, 3);
-        trie.insert(0x040fffff, 32, 4);
-        auto it = trie.find_longest(0xffffffff, 32);
+        trie.insert(Bits{0x00ffffffu, 24}, 1);
+        trie.insert(Bits{0x01ffffffu, 32}, 2);
+        trie.insert(Bits{0x03ffffffu, 32}, 3);
+        trie.insert(Bits{0x040fffffu, 32}, 4);
+        auto it = trie.find_longest(Bits{0xffffffffu, 32});
         std::vector<Value> values;
         while (it != trie.end()) {
             values.push_back(*it);
             ++it;
         }
-        std::vector<Value> const expected{Value{0x00ffffff, 24, 1},
-                                          Value{0x01ffffff, 32, 2},
-                                          Value{0x03ffffff, 32, 3}};
+        std::vector<Value> const expected{Value{Bits{0x00ffffffu, 24}, 1},
+                                          Value{Bits{0x01ffffffu, 32}, 2},
+                                          Value{Bits{0x03ffffffu, 32}, 3}};
         REQUIRE(values == expected);
     }
 }
@@ -667,46 +664,46 @@ TEST_CASE("Iterator interface", "[BitsTrie][find_exact][find_longest]") {
 
     SECTION("find_exact") {
         SECTION("empty BitsTrie, find_exact() == end()") {
-            REQUIRE((trie.find_exact(0, 0) == trie.end()));
+            REQUIRE((trie.find_exact(Bits{0u, 0}) == trie.end()));
         }
 
         SECTION("not empty, find_exact() != end()") {
-            trie.insert(0, 1, 1);
-            REQUIRE((trie.find_exact(0, 1) != trie.end()));
+            trie.insert(Bits{0u, 1}, 1);
+            REQUIRE((trie.find_exact(Bits{0u, 1}) != trie.end()));
         }
 
         SECTION("match an element") {
-            trie.insert(0, 0, 1);
-            REQUIRE(trie.find_exact(0, 0) == trie.begin());
-            REQUIRE(*trie.find_exact(0, 0) == Value{0, 0, 1});
+            trie.insert(Bits{0u, 0}, 1);
+            REQUIRE(trie.find_exact(Bits{0u, 0}) == trie.begin());
+            REQUIRE(*trie.find_exact(Bits{0u, 0}) == Value{Bits{0u, 0}, 1});
         }
 
         SECTION("don't match an element") {
-            trie.insert(0, 0, 1);
-            REQUIRE(trie.find_exact(0, 1) == trie.end());
-            REQUIRE(trie.find_exact(0, 5) == trie.end());
+            trie.insert(Bits{0u, 0}, 1);
+            REQUIRE(trie.find_exact(Bits{0u, 1}) == trie.end());
+            REQUIRE(trie.find_exact(Bits{0u, 5}) == trie.end());
         }
     }
 
     SECTION("find_longest") {
         SECTION("empty BitsTrie, find_longest() == end()") {
-            REQUIRE((trie.find_longest(0, 0) == trie.end()));
+            REQUIRE((trie.find_longest(Bits{0u, 0}) == trie.end()));
         }
 
         SECTION("not empty, find_longest() != end()") {
-            trie.insert(0, 1, 1);
-            REQUIRE((trie.find_longest(0, 2) != trie.end()));
+            trie.insert(Bits{0u, 1}, 1);
+            REQUIRE((trie.find_longest(Bits{0u, 2}) != trie.end()));
         }
 
         SECTION("find an element") {
-            trie.insert(1, 1, 1);
-            REQUIRE(trie.find_longest(1, 2) == trie.begin());
-            REQUIRE(*trie.find_longest(1, 2) == Value{1, 1, 1});
+            trie.insert(Bits{1u, 1}, 1);
+            REQUIRE(trie.find_longest(Bits{1u, 2}) == trie.begin());
+            REQUIRE(*trie.find_longest(Bits{1u, 2}) == Value{Bits{1u, 1}, 1});
         }
 
         SECTION("don't find an element") {
-            trie.insert(1, 1, 1);
-            REQUIRE(trie.find_longest(0, 1) == trie.end());
+            trie.insert(Bits{1u, 1}, 1);
+            REQUIRE(trie.find_longest(Bits{0u, 1}) == trie.end());
         }
     }
 }
@@ -718,11 +715,11 @@ TEST_CASE(
     using BitsTrie = BitsTrie<Uint128, long>;
 
     BitsTrie trie;
-    trie.insert(0, 0, 1);
-    trie.replace(0, 0, 1);
-    trie.match_exact(0, 0);
-    trie.match_longest(0, 0);
-    trie.find_longest(0, 0);
+    trie.insert(Bits<Uint128>{0u, 0}, 1);
+    trie.replace(Bits<Uint128>{0u, 0}, 1);
+    trie.match_exact(Bits<Uint128>{0u, 0});
+    trie.match_longest(Bits<Uint128>{0u, 0});
+    trie.find_longest(Bits<Uint128>{0u, 0});
     trie.begin();
     trie.end();
 }
