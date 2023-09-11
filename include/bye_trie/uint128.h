@@ -24,8 +24,8 @@
 
 #pragma once
 
-namespace everload_trie {
+namespace bye_trie {
 
 using Uint128 = __uint128_t;
 
-} // namespace everload_trie
+} // namespace bye_trie

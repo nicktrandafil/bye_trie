@@ -22,13 +22,13 @@
   SOFTWARE.
 */
 
-#include "everload_trie/trie.h"
+#include "bye_trie/trie.h"
 
-#include "everload_trie/uint128.h"
+#include "bye_trie/uint128.h"
 
 #include <catch2/catch_all.hpp>
 
-using namespace everload_trie;
+using namespace bye_trie;
 
 using PrefixTypes = std::tuple<uint32_t, uint64_t>;
 
@@ -280,8 +280,8 @@ TEST_CASE("Erase branch", "[NodeVec][erase_branch]") {
     }
 }
 
-TEST_CASE("Insert values", "[BitsTrie][insert]") {
-    everload_trie::BitsTrie<uint32_t, long> trie;
+TEST_CASE("Insert values", "[Trie][insert]") {
+    bye_trie::Trie<uint32_t, long> trie;
 
     SECTION("No branching") {
         SECTION("insert the first value") {
@@ -353,15 +353,15 @@ TEST_CASE("Insert values", "[BitsTrie][insert]") {
     }
 }
 
-TEST_CASE("", "[BitsTrie][replace]") {
-   everload_trie::BitsTrie<uint32_t, long> trie;
+TEST_CASE("", "[Trie][replace]") {
+   bye_trie::Trie<uint32_t, long> trie;
    REQUIRE(trie.replace(Bits{0b0'00001u, 6}, 1) == std::nullopt);
    REQUIRE(trie.replace(Bits{0b0'00001u, 6}, 2) == 1);
    REQUIRE(trie.replace(Bits{0b0'00001u, 6}, 3) == 2);
 }
 
-TEST_CASE("Match exact prefixes", "[BitsTrie][match_exact]") {
-    everload_trie::BitsTrie<uint32_t, long> trie;
+TEST_CASE("Match exact prefixes", "[Trie][match_exact]") {
+    bye_trie::Trie<uint32_t, long> trie;
 
     SECTION("positive") {
         trie.insert(Bits{0u, 4}, 0);
@@ -392,8 +392,8 @@ TEST_CASE("Match exact prefixes", "[BitsTrie][match_exact]") {
     }
 }
 
-TEST_CASE("Match longest prefixes", "[BitsTrie][match_longest]", ) {
-    everload_trie::BitsTrie<uint32_t, long> trie;
+TEST_CASE("Match longest prefixes", "[Trie][match_longest]", ) {
+    bye_trie::Trie<uint32_t, long> trie;
     trie.insert(Bits{0b0000u, 4}, 0);
     trie.insert(Bits{0b001u, 3}, 1);
     trie.insert(Bits{0b0000'00001u, 6}, 2);
@@ -430,14 +430,14 @@ TEST_CASE("Match longest prefixes", "[BitsTrie][match_longest]", ) {
     }
 }
 
-TEST_CASE("Erase values", "[BitsTrie][erase_exact]") {
+TEST_CASE("Erase values", "[Trie][erase_exact]") {
    SECTION("Not found") {
-       everload_trie::BitsTrie<uint32_t, long> trie;
+       bye_trie::Trie<uint32_t, long> trie;
        REQUIRE(!trie.erase_exact(Bits{0u, 5}));
        REQUIRE(!trie.erase_exact(Bits{0u, 4}));
    }
    SECTION("No unfold-cleaning") {
-       everload_trie::BitsTrie<uint32_t, long> trie;
+       bye_trie::Trie<uint32_t, long> trie;
        trie.insert(Bits{0b0'00000'00000u, 11}, 0);
        trie.insert(Bits{0b1'00000'00000u, 11}, 1);
        REQUIRE(trie.erase_exact(Bits{0b0'00000'00000u, 11}));
@@ -445,7 +445,7 @@ TEST_CASE("Erase values", "[BitsTrie][erase_exact]") {
        REQUIRE(*trie.match_exact(Bits{0b1'00000'00000u, 11}) == 1);
    }
    SECTION("Unfold-cleaning just the leaf which contains the value") {
-       everload_trie::BitsTrie<uint32_t, long> trie;
+       bye_trie::Trie<uint32_t, long> trie;
        trie.insert(Bits{0b0'00000'00000u, 11}, 0);
        trie.insert(Bits{0b0'00000u, 6}, 1);
        REQUIRE(trie.erase_exact(Bits{0b0'00000'00000u, 11}));
@@ -453,7 +453,7 @@ TEST_CASE("Erase values", "[BitsTrie][erase_exact]") {
        REQUIRE(*trie.match_exact(Bits{0b0'00000u, 6}) == 1);
    }
    SECTION("bug case of confusion of external bitmap index in unfold-cleaning") {
-       everload_trie::BitsTrie<uint32_t, long> trie;
+       bye_trie::Trie<uint32_t, long> trie;
        trie.insert(Bits{0b0'00001'00000u, 11}, 0);
        trie.insert(Bits{0b0'00000u, 6}, 1);
        REQUIRE(trie.erase_exact(Bits{0b0'00001'00000u, 11}));
@@ -461,19 +461,19 @@ TEST_CASE("Erase values", "[BitsTrie][erase_exact]") {
        REQUIRE(*trie.match_exact(Bits{0b0'00000u, 6}) == 1);
    }
    SECTION("Unfold-cleaning the branch up to the root") {
-       everload_trie::BitsTrie<uint32_t, long> trie;
+       bye_trie::Trie<uint32_t, long> trie;
        trie.insert(Bits{0b0'00000'00000u, 11}, 0);
        REQUIRE(trie.erase_exact(Bits{0b0'00000'00000u, 11}));
        REQUIRE(trie.size() == 0);
    }
    SECTION("Unfold-cleaning the branch in case there is just root node") {
-       everload_trie::BitsTrie<uint32_t, long> trie;
+       bye_trie::Trie<uint32_t, long> trie;
        trie.insert(Bits{0b0001u, 4}, 0);
        REQUIRE(trie.erase_exact(Bits{0b0001u, 4}));
        REQUIRE(trie.size() == 0);
    }
    SECTION("node vec index is not equal to stride_m_1") {
-       everload_trie::BitsTrie<uint32_t, long> trie;
+       bye_trie::Trie<uint32_t, long> trie;
        trie.insert(Bits{1u, 2}, 0);
        trie.insert(Bits{2u, 2}, 1);
        trie.erase_exact(Bits{2u, 2});
@@ -535,7 +535,7 @@ TEST_CASE("", "[RecyclingStack]") {
     }
 }
 
-TEST_CASE("Exception guarantee", "[BitsTrie][insert]") {
+TEST_CASE("Exception guarantee", "[Trie][insert]") {
     struct Alloc {
         MemBlk realloc(MemBlk blk, size_t size) noexcept(false) {
             if (tickets-- == 0) {
@@ -553,19 +553,19 @@ TEST_CASE("Exception guarantee", "[BitsTrie][insert]") {
     };
 
     SECTION("useless branches get freed") {
-        BitsTrie<uint32_t, long, Alloc> trie(Alloc{2});
+        Trie<uint32_t, long, Alloc> trie(Alloc{2});
         REQUIRE_THROWS_AS(trie.insert(Bits{0b0'00000'00000u, 11}, 0), std::bad_alloc);
     }
 
     SECTION("can insert on a useless branch") {
-        BitsTrie<uint32_t, long, Alloc> trie(Alloc{2});
+        Trie<uint32_t, long, Alloc> trie(Alloc{2});
         REQUIRE_THROWS_AS(trie.insert(Bits{0b0'00000'00000u, 11}, 0), std::bad_alloc);
         REQUIRE(trie.insert(Bits{0b0'00000'00000u, 11}, 0) == std::nullopt);
         REQUIRE(trie.match_exact(Bits{0b0'00000'00000u, 11}) == 0);
     }
 
     SECTION("try overflow RecyclingVec") {
-        BitsTrie<uint32_t, long, Alloc> trie(Alloc{});
+        Trie<uint32_t, long, Alloc> trie(Alloc{});
         for (auto i = 0u; i < 32; ++i) {
             trie.alloc().tickets = 6;
             REQUIRE_THROWS_AS(trie.insert(Bits{i, 32}, 0), std::bad_alloc);
@@ -576,10 +576,10 @@ TEST_CASE("Exception guarantee", "[BitsTrie][insert]") {
     }
 }
 
-TEST_CASE("Iteration", "[BitsTrie]") {
-    using BitsTrie = BitsTrie<uint32_t, long>;
-    using Value = BitsTrie::ValueType;
-    BitsTrie trie;
+TEST_CASE("Iteration", "[Trie]") {
+    using Trie = Trie<uint32_t, long>;
+    using Value = Trie::ValueType;
+    Trie trie;
 
     SECTION("0/0 exists, begin() doesn't seek the first prefix") {
         trie.insert(Bits{0u, 0}, 1);
@@ -591,7 +591,7 @@ TEST_CASE("Iteration", "[BitsTrie]") {
         REQUIRE((*trie.begin() == Value{Bits{0u, 1}, 1}));
     }
 
-    SECTION("empty BitsTrie, begin() == end()") {
+    SECTION("empty Trie, begin() == end()") {
         REQUIRE((trie.begin() == trie.end()));
     }
 
@@ -657,13 +657,13 @@ TEST_CASE("Iteration", "[BitsTrie]") {
     }
 }
 
-TEST_CASE("Iterator interface", "[BitsTrie][find_exact][find_longest]") {
-    using BitsTrie = BitsTrie<uint32_t, long>;
-    using Value = BitsTrie::ValueType;
-    BitsTrie trie;
+TEST_CASE("Iterator interface", "[Trie][find_exact][find_longest]") {
+    using Trie = Trie<uint32_t, long>;
+    using Value = Trie::ValueType;
+    Trie trie;
 
     SECTION("find_exact") {
-        SECTION("empty BitsTrie, find_exact() == end()") {
+        SECTION("empty Trie, find_exact() == end()") {
             REQUIRE((trie.find_exact(Bits{0u, 0}) == trie.end()));
         }
 
@@ -686,7 +686,7 @@ TEST_CASE("Iterator interface", "[BitsTrie][find_exact][find_longest]") {
     }
 
     SECTION("find_longest") {
-        SECTION("empty BitsTrie, find_longest() == end()") {
+        SECTION("empty Trie, find_longest() == end()") {
             REQUIRE((trie.find_longest(Bits{0u, 0}) == trie.end()));
         }
 
@@ -711,10 +711,10 @@ TEST_CASE("Iterator interface", "[BitsTrie][find_exact][find_longest]") {
 TEST_CASE(
         "Call every function of the interface with 128 bit prefix type just to ensure "
         "compilation",
-        "[BitsTrie]") {
-    using BitsTrie = BitsTrie<Uint128, long>;
+        "[Trie]") {
+    using Trie = Trie<Uint128, long>;
 
-    BitsTrie trie;
+    Trie trie;
     trie.insert(Bits<Uint128>{0u, 0}, 1);
     trie.replace(Bits<Uint128>{0u, 0}, 1);
     trie.match_exact(Bits<Uint128>{0u, 0});

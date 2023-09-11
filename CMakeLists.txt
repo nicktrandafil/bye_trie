@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.26.4)
 
-project(everload_trie VERSION 0.1)
+project(bye_trie VERSION 0.1)
 
 option(${PROJECT_NAME}_TESTS "Enable tests" OFF)
 
@@ -11,12 +11,12 @@ else()
     set(${PROJECT_NAME}_sub ON)
 endif()
 
-add_library(everload_trie INTERFACE 
-    include/everload_trie/trie.h
-    include/everload_trie/uint128.h
-    include/everload_trie/boost_ip_net_adaptor.h
+add_library(bye_trie INTERFACE 
+    include/bye_trie/trie.h
+    include/bye_trie/uint128.h
+    include/bye_trie/boost_ip_net_adaptor.h
 )
-target_include_directories(everload_trie INTERFACE include)
+target_include_directories(bye_trie INTERFACE include)
 
 function(set_target_build_settings target)
     if(NOT TARGET ${target})

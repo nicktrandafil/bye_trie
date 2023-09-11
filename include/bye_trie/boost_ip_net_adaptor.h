@@ -29,7 +29,7 @@
 #include <boost/asio/ip/network_v6.hpp>
 #include <ostream>
 
-namespace everload_trie {
+namespace bye_trie {
 
 namespace detail {
 
@@ -139,8 +139,8 @@ private:
 };
 
 template <class IpNetType, UnsignedIntegral IntType, class T, class Allocator>
-class BitsTrieIpNetAdaptor : private BitsTrie<IntType, T, Allocator> {
-    using Base = BitsTrie<IntType, T, Allocator>;
+class TrieIpNetAdaptor : private Trie<IntType, T, Allocator> {
+    using Base = Trie<IntType, T, Allocator>;
 
     using IpNetTypeCopyOptimized =
             std::conditional_t<sizeof(IpNetType) <= 16, IpNetType, IpNetType const&>;
@@ -212,24 +212,17 @@ public:
 };
 
 template <class T, class Allocator = SystemAllocator>
-class BitsTrieV4
-        : public BitsTrieIpNetAdaptor<boost::asio::ip::network_v4,
-                                      uint32_t,
-                                      T,
-                                      Allocator> {
-    using Base =
-            BitsTrieIpNetAdaptor<boost::asio::ip::network_v4, uint32_t, T, Allocator>;
+class TrieV4
+        : public TrieIpNetAdaptor<boost::asio::ip::network_v4, uint32_t, T, Allocator> {
+    using Base = TrieIpNetAdaptor<boost::asio::ip::network_v4, uint32_t, T, Allocator>;
     using Base::Base;
 };
 
 template <class T, class Allocator = SystemAllocator>
-class BitsTrieV6
-        : public BitsTrieIpNetAdaptor<boost::asio::ip::network_v6,
-                                      Uint128,
-                                      T,
-                                      Allocator> {
-    using Base = BitsTrieIpNetAdaptor<boost::asio::ip::network_v6, Uint128, T, Allocator>;
+class TrieV6
+        : public TrieIpNetAdaptor<boost::asio::ip::network_v6, Uint128, T, Allocator> {
+    using Base = TrieIpNetAdaptor<boost::asio::ip::network_v6, Uint128, T, Allocator>;
     using Base::Base;
 };
 
-} // namespace everload_trie
+} // namespace bye_trie

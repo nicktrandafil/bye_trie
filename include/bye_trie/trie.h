@@ -41,7 +41,7 @@
 
 static_assert(sizeof(void*) == 8, "64-bit only");
 
-namespace everload_trie {
+namespace bye_trie {
 
 struct MemBlk {
     bool operator==(MemBlk const&) const noexcept = default;
@@ -779,7 +779,7 @@ public:
 
 private:
     template <UnsignedIntegral, TrivialLittleObject, Allocator Alloc>
-    friend class BitsTrie;
+    friend class Trie;
 
     explicit Iterator(detail::Node node, Bits<P> prefix) noexcept(false)
             : node{node} {
@@ -810,31 +810,31 @@ private:
 };
 
 template <UnsignedIntegral P, TrivialLittleObject T, Allocator Alloc = SystemAllocator>
-class BitsTrie {
+class Trie {
 public:
     using ValueType = typename Iterator<P, T>::value_type;
 
-    explicit BitsTrie() noexcept(noexcept(Alloc{}))
+    explicit Trie() noexcept(noexcept(Alloc{}))
             : alloc_{}
             , root_{detail::InternalBitmap{0}, detail::ExternalBitmap{0}, nullptr} {
     }
 
-    explicit BitsTrie(Alloc&& alloc) noexcept
+    explicit Trie(Alloc&& alloc) noexcept
             : alloc_{std::move(alloc)}
             , root_{detail::InternalBitmap{0}, detail::ExternalBitmap{0}, nullptr} {
     }
 
-    BitsTrie(const BitsTrie&) = delete;
-    BitsTrie& operator=(const BitsTrie&) = delete;
+    Trie(const Trie&) = delete;
+    Trie& operator=(const Trie&) = delete;
 
-    BitsTrie(BitsTrie&& rhs) noexcept
+    Trie(Trie&& rhs) noexcept
             : root_{rhs.root_}
             , size_{rhs.size_} {
         rhs.root_ = detail::Node{};
         rhs.size_ = 0;
     }
 
-    BitsTrie& operator=(BitsTrie&& rhs) noexcept {
+    Trie& operator=(Trie&& rhs) noexcept {
         root_ = rhs.root_;
         size_ = rhs.size_;
         rhs.root_ = detail::Node{};
@@ -1011,7 +1011,7 @@ public:
         return size_;
     }
 
-    ~BitsTrie() noexcept {
+    ~Trie() noexcept {
         detail::RecyclingStack stack;
         stack.push(root_);
         while (!stack.empty()) { // DFS traversal
@@ -1156,4 +1156,4 @@ private:
     size_t size_{0};
 };
 
-} // namespace everload_trie
+} // namespace bye_trie
