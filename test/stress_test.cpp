@@ -29,6 +29,7 @@
 
 #include <forward_list>
 #include <fstream>
+#include <iostream>
 
 using namespace bye_trie;
 
@@ -65,6 +66,11 @@ static uint16_t parse_int(std::string_view view) {
     return result;
 }
 
+template <class T>
+static inline __attribute__((always_inline)) void do_not_optimize(T&& value) noexcept {
+    asm volatile("" : "+m"(value) : : "memory");
+}
+
 TEST_CASE("Real data test", "[stress]") {
     std::vector<std::pair<boost::asio::ip::network_v4, uint16_t>> prefixes;
     IpNetV4ByeTrie<long> trie;
@@ -88,6 +94,33 @@ TEST_CASE("Real data test", "[stress]") {
 
     for (auto const& [prefix, value] : prefixes) {
         INFO(prefix);
-        REQUIRE(!trie.insert(prefix, value).has_value());
+        trie.insert(prefix, value).has_value();
+    }
+
+    {
+        auto inet_max = 255u;
+        auto len_max = 32u;
+
+        auto const start = std::chrono::steady_clock::now();
+        for (auto i_net = 0u; i_net <= inet_max; ++i_net) {
+            for (unsigned short s_len = 0; s_len <= len_max; ++s_len) {
+                for (auto ii_net = 0u; ii_net <= inet_max; ++ii_net) {
+                    auto const bits = Bits{i_net, 8}
+                                              .concatenated(Bits{ii_net, 8})
+                                              .concatenated(Bits{0u, 16});
+                    auto value = trie.match_longest(boost::asio::ip::make_network_v4(
+                            boost::asio::ip::make_address_v4(bits.bits()), s_len));
+                    do_not_optimize(value);
+                }
+            }
+        }
+        auto const end = std::chrono::steady_clock::now();
+
+        auto const dur = end - start;
+        auto const n = inet_max * inet_max * len_max;
+        auto const ns =
+                std::chrono::duration_cast<std::chrono::nanoseconds>(dur).count() / n;
+
+        std::cout << "ns: " << ns << '\n';
     }
 }
