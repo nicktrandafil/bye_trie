@@ -14,4 +14,8 @@ Average insert time 78ns.
 
 The tests are done on i7-1185G7 @ 3.00GHz laptop CPU.
 
-The data is taken from [Team Cymru](https://blog.apnic.net/2021/06/04/storing-and-retrieving-ip-prefixes-efficiently/).
+The data is taken from [Storing and retrieving IP prefixes efficiently](https://blog.apnic.net/2021/06/04/storing-and-retrieving-ip-prefixes-efficiently/) blog pot.
+
+# Design decisions
+
+The data structure intentionally supports only 8-byte trivial values. For larger value types, users must store and manage values themselves, with the trie storing only pointers to the values. It might be better to think of the data structure as an index rather than a container. This simplifies the implementation without sacrificing any functionality.
