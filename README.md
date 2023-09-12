@@ -20,3 +20,5 @@ The data is taken from [Storing and retrieving IP prefixes efficiently](https://
 # Design decisions
 
 The data structure intentionally supports only 8-byte trivial values. For larger value types, users must store and manage values themselves, with the trie storing only pointers to the values. It might be better to think of the data structure as an index rather than a container. This simplifies the implementation without sacrificing any functionality.
+
+Allocator has different (incompatible) interface than the standard library's allocator. The trie requires [`realloc`](https://en.cppreference.com/w/cpp/memory/c/realloc) operations, which is not supported by the standard library's allocator.
