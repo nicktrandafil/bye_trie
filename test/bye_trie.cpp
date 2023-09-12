@@ -710,6 +710,17 @@ TEST_CASE("Iterator interface", "[ByeTrie][find_exact][find_longest]") {
     }
 }
 
+TEST_CASE("Move assignment", "[ByeTrie]") {
+    ByeTrie<uint32_t, long> trie;
+    trie.insert(Bits{0u, 32}, 1);
+
+    ByeTrie<uint32_t, long> trie2;
+    trie2.insert(Bits{1u, 32}, 2);
+
+    trie = std::move(trie2);
+    REQUIRE(trie.match_exact(Bits{1u, 32}) == 2);
+}
+
 TEST_CASE(
         "Call every function of the interface with 128 bit prefix type just to ensure "
         "compilation",

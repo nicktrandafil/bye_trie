@@ -835,10 +835,8 @@ public:
     }
 
     ByeTrie& operator=(ByeTrie&& rhs) noexcept {
-        root_ = rhs.root_;
-        size_ = rhs.size_;
-        rhs.root_ = detail::Node{};
-        rhs.size_ = 0;
+        this->~ByeTrie();
+        new (this) ByeTrie(std::move(rhs));
         return *this;
     }
 
