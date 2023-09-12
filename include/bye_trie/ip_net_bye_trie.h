@@ -22,15 +22,15 @@
   SOFTWARE.
 */
 
-#include "trie.h"
+#include "bye_trie.h"
 #include "uint128.h"
 
 #include <boost/asio/ip/network_v4.hpp>
 #include <boost/asio/ip/network_v6.hpp>
+
 #include <ostream>
 
 namespace bye_trie {
-
 namespace detail {
 
 // clang-format off
@@ -88,11 +88,11 @@ inline Uint128 reverse_bits_of_bytes(
 } // namespace detail
 
 template <class PrefixType, UnsignedIntegral IntType, TrivialLittleObject T>
-class IteratorAdaptor {
+class IpNetIterator {
     using Inner = Iterator<IntType, T>;
 
 public:
-    explicit IteratorAdaptor(Inner x) noexcept(false)
+    explicit IpNetIterator(Inner x) noexcept(false)
             : inner{x} {
     }
 
@@ -125,12 +125,12 @@ public:
         };
     }
 
-    IteratorAdaptor& operator++() noexcept(false) {
+    IpNetIterator& operator++() noexcept(false) {
         ++inner;
         return *this;
     }
 
-    bool operator==(IteratorAdaptor const& rhs) const noexcept {
+    bool operator==(IpNetIterator const& rhs) const noexcept {
         return inner == rhs.inner;
     }
 
@@ -139,8 +139,8 @@ private:
 };
 
 template <class IpNetType, UnsignedIntegral IntType, class T, class Allocator>
-class TrieIpNetAdaptor : private Trie<IntType, T, Allocator> {
-    using Base = Trie<IntType, T, Allocator>;
+class IpNetByeTrie : private ByeTrie<IntType, T, Allocator> {
+    using Base = ByeTrie<IntType, T, Allocator>;
 
     using IpNetTypeCopyOptimized =
             std::conditional_t<sizeof(IpNetType) <= 16, IpNetType, IpNetType const&>;
@@ -149,7 +149,7 @@ public:
     using Base::Base;
     using Base::size;
 
-    using ValueType = typename IteratorAdaptor<IpNetType, IntType, T>::value_type;
+    using ValueType = typename IpNetIterator<IpNetType, IntType, T>::value_type;
 
     auto insert(IpNetTypeCopyOptimized prefix,
                 T value) noexcept(noexcept(Base::insert({}, {}))) {
@@ -188,40 +188,40 @@ public:
         return std::pair{IpNetType{prefix.address(), prefix_length}, value};
     }
 
-    IteratorAdaptor<IpNetType, IntType, T> find_exact(IpNetTypeCopyOptimized prefix) const
+    IpNetIterator<IpNetType, IntType, T> find_exact(IpNetTypeCopyOptimized prefix) const
             noexcept(false) {
-        return IteratorAdaptor<IpNetType, IntType, T>{Base::find_exact(
+        return IpNetIterator<IpNetType, IntType, T>{Base::find_exact(
                 Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
                      static_cast<uint8_t>(prefix.prefix_length())})};
     }
 
-    IteratorAdaptor<IpNetType, IntType, T> find_longest(
-            IpNetTypeCopyOptimized prefix) const noexcept(false) {
-        return IteratorAdaptor<IpNetType, IntType, T>{Base::find_longest(
+    IpNetIterator<IpNetType, IntType, T> find_longest(IpNetTypeCopyOptimized prefix) const
+            noexcept(false) {
+        return IpNetIterator<IpNetType, IntType, T>{Base::find_longest(
                 Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
                      static_cast<uint8_t>(prefix.prefix_length())})};
     }
 
-    IteratorAdaptor<IpNetType, IntType, T> begin() const noexcept(false) {
-        return IteratorAdaptor<IpNetType, IntType, T>{Base::begin()};
+    IpNetIterator<IpNetType, IntType, T> begin() const noexcept(false) {
+        return IpNetIterator<IpNetType, IntType, T>{Base::begin()};
     }
 
-    IteratorAdaptor<IpNetType, IntType, T> end() const noexcept(false) {
-        return IteratorAdaptor<IpNetType, IntType, T>{Base::end()};
+    IpNetIterator<IpNetType, IntType, T> end() const noexcept(false) {
+        return IpNetIterator<IpNetType, IntType, T>{Base::end()};
     }
 };
 
 template <class T, class Allocator = SystemAllocator>
-class TrieV4
-        : public TrieIpNetAdaptor<boost::asio::ip::network_v4, uint32_t, T, Allocator> {
-    using Base = TrieIpNetAdaptor<boost::asio::ip::network_v4, uint32_t, T, Allocator>;
+class ByeTrieV4
+        : public IpNetByeTrie<boost::asio::ip::network_v4, uint32_t, T, Allocator> {
+    using Base = IpNetByeTrie<boost::asio::ip::network_v4, uint32_t, T, Allocator>;
     using Base::Base;
 };
 
 template <class T, class Allocator = SystemAllocator>
-class TrieV6
-        : public TrieIpNetAdaptor<boost::asio::ip::network_v6, Uint128, T, Allocator> {
-    using Base = TrieIpNetAdaptor<boost::asio::ip::network_v6, Uint128, T, Allocator>;
+class ByeTrieV6
+        : public IpNetByeTrie<boost::asio::ip::network_v6, Uint128, T, Allocator> {
+    using Base = IpNetByeTrie<boost::asio::ip::network_v6, Uint128, T, Allocator>;
     using Base::Base;
 };
 

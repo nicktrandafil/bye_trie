@@ -22,7 +22,7 @@
   SOFTWARE.
 */
 
-#include "bye_trie/boost_ip_net_adaptor.h"
+#include "bye_trie/ip_net_bye_trie.h"
 
 #include <catch2/catch_all.hpp>
 
@@ -47,8 +47,8 @@ TEST_CASE(
         "Mostly to ensure compilation tests. We know that the wrapper does nothing but "
         "`reverse_bits_of_bytes`",
         "[white-box]") {
-    SECTION("TrieV4") {
-        TrieV4<long> trie;
+    SECTION("ByeTrieV4") {
+        ByeTrieV4<long> trie;
         REQUIRE(trie.insert(make_network_v4("0.0.0.0/0"), 0) == std::nullopt);
 
         REQUIRE(trie.replace(make_network_v4("0.0.0.0/0"), 0) == 0);
@@ -61,8 +61,8 @@ TEST_CASE(
         REQUIRE(trie.find_longest(make_network_v4("0.0.0.0/0")) == trie.begin());
     }
 
-    SECTION("TrieV6") {
-        TrieV6<long> trie;
+    SECTION("ByeTrieV6") {
+        ByeTrieV6<long> trie;
         REQUIRE(trie.insert(make_network_v6("::/0"), 0) == std::nullopt);
 
         REQUIRE(trie.replace(make_network_v6("::/0"), 0) == 0);
@@ -77,18 +77,18 @@ TEST_CASE(
 }
 
 TEST_CASE("Indirect testing of IteratorV4::operator*()", "[white-box]") {
-    SECTION("TrieV4") {
-        TrieV4<long> trie;
-        using Value = TrieV4<long>::ValueType;
+    SECTION("ByeTrieV4") {
+        ByeTrieV4<long> trie;
+        using Value = ByeTrieV4<long>::ValueType;
         REQUIRE(trie.insert(make_network_v4("25.0.0.0/8"), 1) == std::nullopt);
 
         REQUIRE(*trie.find_longest(make_network_v4("25.1.0.0/16"))
                 == Value{.prefix = make_network_v4("25.0.0.0/8"), .value = 1});
     }
 
-    SECTION("TrieV6") {
-        TrieV6<long> trie;
-        using Value = TrieV6<long>::ValueType;
+    SECTION("ByeTrieV6") {
+        ByeTrieV6<long> trie;
+        using Value = ByeTrieV6<long>::ValueType;
         REQUIRE(trie.insert(make_network_v6("::/0"), 1) == std::nullopt);
 
         REQUIRE(*trie.find_longest(make_network_v6("::1/128"))

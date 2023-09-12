@@ -779,7 +779,7 @@ public:
 
 private:
     template <UnsignedIntegral, TrivialLittleObject, Allocator Alloc>
-    friend class Trie;
+    friend class ByeTrie;
 
     explicit Iterator(detail::Node node, Bits<P> prefix) noexcept(false)
             : node{node} {
@@ -810,31 +810,31 @@ private:
 };
 
 template <UnsignedIntegral P, TrivialLittleObject T, Allocator Alloc = SystemAllocator>
-class Trie {
+class ByeTrie {
 public:
     using ValueType = typename Iterator<P, T>::value_type;
 
-    explicit Trie() noexcept(noexcept(Alloc{}))
+    explicit ByeTrie() noexcept(noexcept(Alloc{}))
             : alloc_{}
             , root_{detail::InternalBitmap{0}, detail::ExternalBitmap{0}, nullptr} {
     }
 
-    explicit Trie(Alloc&& alloc) noexcept
+    explicit ByeTrie(Alloc&& alloc) noexcept
             : alloc_{std::move(alloc)}
             , root_{detail::InternalBitmap{0}, detail::ExternalBitmap{0}, nullptr} {
     }
 
-    Trie(const Trie&) = delete;
-    Trie& operator=(const Trie&) = delete;
+    ByeTrie(const ByeTrie&) = delete;
+    ByeTrie& operator=(const ByeTrie&) = delete;
 
-    Trie(Trie&& rhs) noexcept
+    ByeTrie(ByeTrie&& rhs) noexcept
             : root_{rhs.root_}
             , size_{rhs.size_} {
         rhs.root_ = detail::Node{};
         rhs.size_ = 0;
     }
 
-    Trie& operator=(Trie&& rhs) noexcept {
+    ByeTrie& operator=(ByeTrie&& rhs) noexcept {
         root_ = rhs.root_;
         size_ = rhs.size_;
         rhs.root_ = detail::Node{};
@@ -1006,7 +1006,7 @@ public:
         return size_;
     }
 
-    ~Trie() noexcept {
+    ~ByeTrie() noexcept {
         detail::RecyclingStack stack;
         stack.push(root_);
         while (!stack.empty()) { // DFS traversal

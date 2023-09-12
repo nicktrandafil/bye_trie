@@ -22,17 +22,18 @@
   SOFTWARE.
 */
 
-#include "bye_trie/trie.h"
+#include "bye_trie/bye_trie.h"
 
 #include <catch2/catch_all.hpp>
+
 #include <forward_list>
 
 using namespace bye_trie;
 
 TEST_CASE("Load big data and match every prefix", "[stress]") {
     std::forward_list<std::pair<Bits<uint32_t>, uint32_t>> prefixes;
-    Trie<uint32_t, long> trie;
-    using Value = Trie<uint32_t, long>::ValueType;
+    ByeTrie<uint32_t, long> trie;
+    using Value = ByeTrie<uint32_t, long>::ValueType;
 
     uint32_t i = 0;
     Bits<uint32_t> bits{4, 8};

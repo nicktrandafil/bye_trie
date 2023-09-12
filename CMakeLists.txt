@@ -12,9 +12,9 @@ else()
 endif()
 
 add_library(bye_trie INTERFACE 
-    include/bye_trie/trie.h
+    include/bye_trie/bye_trie.h
+    include/bye_trie/ip_net_bye_trie.h
     include/bye_trie/uint128.h
-    include/bye_trie/boost_ip_net_adaptor.h
 )
 target_include_directories(bye_trie INTERFACE include)
 
@@ -63,9 +63,9 @@ if(${PROJECT_NAME}_TESTS)
         find_package(Catch2 REQUIRED QUIET)
     endif()
     add_executable(test_${PROJECT_NAME}
-        test/boost_ip_net_adaptor.cpp
+        test/bye_trie.cpp
+        test/ip_net_bye_trie.cpp
         test/stress_test.cpp
-        test/trie.cpp
     )
     target_link_libraries(test_${PROJECT_NAME} Catch2::Catch2WithMain ${PROJECT_NAME})
     set_target_build_settings(test_${PROJECT_NAME})
