@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.26.4)
 project(bye_trie VERSION 0.1)
 
 option(${PROJECT_NAME}_TESTS "Enable tests" OFF)
+option(${PROJECT_NAME}_BENCHMARKS "Enable benchmarks" OFF)
 
 # if inside subdirectory of another project
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
@@ -18,12 +19,19 @@ add_library(bye_trie INTERFACE
 )
 target_include_directories(bye_trie INTERFACE include)
 
-function(set_target_build_settings target)
+function(set_target_build_settings target standard)
     if(NOT TARGET ${target})
         message(FATAL_ERROR "Not target ${target}")
     endif()
 
-    set_target_properties(${target} PROPERTIES CXX_STANDARD 20)
+    # test if the c++ standard is supported
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-std=c++${standard}" COMPILER_SUPPORTS_CXX)
+    if(NOT COMPILER_SUPPORTS_CXX${standard})
+        message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++${standard} support.")
+    endif()
+
+    set_target_properties(${target} PROPERTIES CXX_STANDARD ${standard})
 
     set(sancov_flags --coverage -fsanitize=address -fsanitize=undefined -fsanitize=leak
         -fsanitize-address-use-after-scope
@@ -68,14 +76,8 @@ if(${PROJECT_NAME}_TESTS)
         test/stress_test.cpp
     )
     target_link_libraries(test_${PROJECT_NAME} Catch2::Catch2WithMain ${PROJECT_NAME})
-    set_target_build_settings(test_${PROJECT_NAME})
+    set_target_build_settings(test_${PROJECT_NAME} 20)
     add_test(test_${PROJECT_NAME} test_${PROJECT_NAME})
-    add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/uniq_pfx_asn_dfz.csv
-        COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/data/uniq_pfx_asn_dfz.csv ${CMAKE_BINARY_DIR}
-        DEPENDS data/uniq_pfx_asn_dfz.csv
-    )
-    add_custom_target(data DEPENDS ${CMAKE_BINARY_DIR}/uniq_pfx_asn_dfz.csv)
-    add_dependencies(test_${PROJECT_NAME} data)
 endif()
 
 if(${PROJECT_NAME}_TESTS AND CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -91,4 +93,18 @@ if(${PROJECT_NAME}_TESTS AND CMAKE_BUILD_TYPE STREQUAL "Debug")
         COMMAND ./cov.sh
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     )
+elseif(${PROJECT_NAME}_TESTS)
+    message(NOTICE "Build in Debug mode to enable coverage")
+endif()
+
+if(${PROJECT_NAME}_BENCHMARKS)
+    add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/uniq_pfx_asn_dfz.csv
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/bench/uniq_pfx_asn_dfz.csv ${CMAKE_BINARY_DIR}
+        DEPENDS bench/uniq_pfx_asn_dfz.csv
+    )
+    add_custom_target(data DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/uniq_pfx_asn_dfz.csv)
+    add_executable(bench_ipv4_networks bench/ipv4_networks.cpp)
+    target_link_libraries(bench_ipv4_networks PRIVATE ${PROJECT_NAME})
+    set_target_build_settings(bench_ipv4_networks 23)
+    add_dependencies(bench_ipv4_networks data)
 endif()
