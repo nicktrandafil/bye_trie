@@ -9,9 +9,10 @@ The goal of this implementation is to be space and time efficient as much as pos
 
 Internet's IPv4 prefixes and ASNs (about 893k) are used as test data. The results are:
 
-* Peak memory consumption 6MB.
-* Average longest prefix lookup search time 13ns.
-* Average insert time 78ns.
+* peak memory consumption: 6MB
+* average insert time: 73ns
+* average match_longest time (prefix_len=32): 26ns
+* average match_exact time (prefix_length=32): 10ns
 
 The tests are done on i7-1185G7 @ 3.00GHz laptop CPU.
 
