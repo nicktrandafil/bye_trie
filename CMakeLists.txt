@@ -4,6 +4,7 @@ project(bye_trie VERSION 0.1)
 
 option(${PROJECT_NAME}_TESTS "Enable tests" OFF)
 option(${PROJECT_NAME}_BENCHMARKS "Enable benchmarks" OFF)
+option(${PROJECT_NAME}_BOOST_IP "Enable boost::asio::ip::network" OFF)
 
 # if inside subdirectory of another project
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
@@ -12,12 +13,25 @@ else()
     set(${PROJECT_NAME}_sub ON)
 endif()
 
-add_library(bye_trie INTERFACE 
+set(sources
     include/bye_trie/bye_trie.h
-    include/bye_trie/ip_net_bye_trie.h
     include/bye_trie/uint128.h
 )
-target_include_directories(bye_trie INTERFACE include)
+
+if(${PROJECT_NAME}_BOOST_IP)
+    set(sources ${sources} include/bye_trie/ip_net_bye_trie.h)
+endif()
+add_library(${PROJECT_NAME} INTERFACE ${sources})
+target_include_directories(${PROJECT_NAME} INTERFACE include)
+
+if(NOT ${PROJECT_NAME}_sub AND ${PROJECT_NAME}_BOOST_IP)
+    find_package(Boost REQUIRED  QUIET)
+endif()
+
+if(${PROJECT_NAME}_BOOST_IP)
+    target_link_libraries(${PROJECT_NAME} INTERFACE Boost::headers)
+endif()
+
 
 function(set_target_build_settings target standard)
     if(NOT TARGET ${target})
@@ -26,7 +40,7 @@ function(set_target_build_settings target standard)
 
     # test if the c++ standard is supported
     include(CheckCXXCompilerFlag)
-    check_cxx_compiler_flag("-std=c++${standard}" COMPILER_SUPPORTS_CXX)
+    check_cxx_compiler_flag("-std=c++${standard}" COMPILER_SUPPORTS_CXX${standard})
     if(NOT COMPILER_SUPPORTS_CXX${standard})
         message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++${standard} support.")
     endif()
@@ -70,11 +84,14 @@ if(${PROJECT_NAME}_TESTS)
     if(NOT ${PROJECT_NAME}_sub)
         find_package(Catch2 REQUIRED QUIET)
     endif()
-    add_executable(test_${PROJECT_NAME}
+    set(sources
         test/bye_trie.cpp
-        test/ip_net_bye_trie.cpp
         test/stress_test.cpp
     )
+    if(${PROJECT_NAME}_BOOST_IP)
+        set(sources ${sources} test/ip_net_bye_trie.cpp)
+    endif()
+    add_executable(test_${PROJECT_NAME} ${sources})
     target_link_libraries(test_${PROJECT_NAME} Catch2::Catch2WithMain ${PROJECT_NAME})
     set_target_build_settings(test_${PROJECT_NAME} 20)
     add_test(test_${PROJECT_NAME} test_${PROJECT_NAME})
@@ -98,6 +115,9 @@ elseif(${PROJECT_NAME}_TESTS)
 endif()
 
 if(${PROJECT_NAME}_BENCHMARKS)
+    if(NOT ${PROJECT_NAME}_BOOST_IP)
+        message(FATAL_ERROR "Benchmarks require boost::asio::ip::network")
+    endif()
     add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/uniq_pfx_asn_dfz.csv
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/bench/uniq_pfx_asn_dfz.csv ${CMAKE_BINARY_DIR}
         DEPENDS bench/uniq_pfx_asn_dfz.csv
