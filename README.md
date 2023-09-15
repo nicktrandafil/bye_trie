@@ -11,8 +11,8 @@ Internet's IPv4 prefixes and ASNs (about 893k) are used as test data. The result
 
 * peak memory consumption: 6MB
 * average insert time: 73ns
-* average match_longest time (prefix_len=32): 26ns
-* average match_exact time (prefix_length=32): 10ns
+* average match_longest time of 32bit prefixes: 26ns
+* average match_exact time of 32bit prefixes: 10ns
 
 The tests are done on i7-1185G7 @ 3.00GHz laptop CPU.
 

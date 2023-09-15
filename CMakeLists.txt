@@ -127,4 +127,8 @@ if(${PROJECT_NAME}_BENCHMARKS)
     target_link_libraries(bench_ipv4_networks PRIVATE ${PROJECT_NAME})
     set_target_build_settings(bench_ipv4_networks 23)
     add_dependencies(bench_ipv4_networks data)
+
+    add_executable(bench_throughput bench/throughput.cpp)
+    target_link_libraries(bench_throughput PRIVATE ${PROJECT_NAME})
+    set_target_build_settings(bench_throughput 23)
 endif()
