@@ -131,4 +131,8 @@ if(${PROJECT_NAME}_BENCHMARKS)
     add_executable(bench_throughput bench/throughput.cpp)
     target_link_libraries(bench_throughput PRIVATE ${PROJECT_NAME})
     set_target_build_settings(bench_throughput 23)
+
+    add_executable(bench_throughput_iar16 bench/throughput_iar16.cpp)
+    target_link_libraries(bench_throughput_iar16 PRIVATE ${PROJECT_NAME})
+    set_target_build_settings(bench_throughput_iar16 23)
 endif()

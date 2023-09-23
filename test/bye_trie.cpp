@@ -736,3 +736,18 @@ TEST_CASE(
     trie.begin();
     trie.end();
 }
+
+TEST_CASE("Initial array optimization", "[ByeTrie][Iar]") {
+    using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, Iar16>;
+
+    ByeTrie trie;
+    trie.insert(Bits{0u, 16}, 1);
+    REQUIRE(trie.size() == 1);
+    REQUIRE(trie.match_exact(Bits{0u, 16}) == 1);
+    REQUIRE(trie.match_longest(Bits{0u, 16}) == std::pair{uint8_t(16), 1L});
+    trie.replace(Bits{0u, 16}, 2);
+    REQUIRE(trie.match_exact(Bits{0u, 16}) == 2);
+    trie.insert(Bits{0u, 24}, 3);
+    REQUIRE(trie.match_exact(Bits{0u, 24}) == 3);
+    REQUIRE(trie.match_exact(Bits{1u, 24}) == std::nullopt);
+}

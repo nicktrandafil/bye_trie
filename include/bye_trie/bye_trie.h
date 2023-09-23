@@ -778,7 +778,7 @@ public:
     }
 
 private:
-    template <UnsignedIntegral, TrivialLittleObject, Allocator Alloc>
+    template <UnsignedIntegral, TrivialLittleObject, Allocator, class>
     friend class ByeTrie;
 
     explicit Iterator(detail::Node node, Bits<P> prefix) noexcept(false)
@@ -809,28 +809,68 @@ private:
     std::vector<State> states;
 };
 
-template <UnsignedIntegral P, TrivialLittleObject T, Allocator Alloc = SystemAllocator>
+/// Initial Array Optimization of size 65536
+class Iar16 {
+public:
+    static constexpr uint8_t len = 16;
+
+    detail::Node& root(auto& prefix) noexcept {
+        assert(prefix.len() >= len);
+        auto [p, s] = prefix.split_at(len);
+        prefix = s;
+        return roots_[p.value()];
+    }
+
+    auto& roots() const noexcept {
+        return roots_;
+    }
+
+private:
+    std::array<detail::Node, 1 << len> roots_;
+};
+
+/// No initial array optimization
+class Iar0 {
+public:
+    static constexpr uint8_t len = 0;
+
+    detail::Node& root(auto) noexcept {
+        return root_;
+    }
+
+    auto roots() const noexcept {
+        return std::array<detail::Node, 1>{root_};
+    }
+
+private:
+    detail::Node root_;
+};
+
+template <UnsignedIntegral P,
+          TrivialLittleObject T,
+          Allocator Alloc = SystemAllocator,
+          class Iar = Iar0>
 class ByeTrie {
 public:
     using ValueType = typename Iterator<P, T>::value_type;
 
     explicit ByeTrie() noexcept(noexcept(Alloc{}))
             : alloc_{}
-            , root_{detail::InternalBitmap{0}, detail::ExternalBitmap{0}, nullptr} {
+            , roots_{} {
     }
 
     explicit ByeTrie(Alloc&& alloc) noexcept
             : alloc_{std::move(alloc)}
-            , root_{detail::InternalBitmap{0}, detail::ExternalBitmap{0}, nullptr} {
+            , roots_{} {
     }
 
     ByeTrie(const ByeTrie&) = delete;
     ByeTrie& operator=(const ByeTrie&) = delete;
 
     ByeTrie(ByeTrie&& rhs) noexcept
-            : root_{rhs.root_}
+            : roots_{rhs.roots_}
             , size_{rhs.size_} {
-        rhs.root_ = detail::Node{};
+        rhs.roots_ = {};
         rhs.size_ = 0;
     }
 
@@ -846,7 +886,7 @@ public:
     /// \throw Forwards `Alloc::realloc` exception
     std::optional<T> insert(Bits<P> prefix,
                             T value) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
-        detail::Node* node = &root_;
+        detail::Node* node = &roots_.root(prefix);
         find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
         auto const prev = match_exact_or_insert(node, prefix, value);
@@ -859,7 +899,7 @@ public:
     /// \throw Forwards `Alloc::realloc` exception
     std::optional<T> replace(Bits<P> prefix,
                              T value) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
-        detail::Node* node = &root_;
+        detail::Node* node = &roots_.root(prefix);
         find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
         if (auto const old_value = match_exact_or_insert(node, prefix, value)) {
@@ -874,7 +914,7 @@ public:
 
     /// Match exact prefix
     std::optional<T> match_exact(Bits<P> prefix) const noexcept {
-        detail::Node* node = &root_;
+        detail::Node* node = &roots_.root(prefix);
 
         find_leaf_branch(node, prefix, noop);
         if (prefix.len() > detail::stride_m_1) {
@@ -894,17 +934,18 @@ public:
 
     /// Counterpart of `match_exact` which returns an iterator
     /// \throw std::bad_alloc
+    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0>>* = nullptr>
     Iterator<P, T> find_exact(Bits<P> prefix) const noexcept(false) {
-        detail::Node* node = &root_;
-        auto reminder = prefix;
+        auto suffix = prefix;
+        detail::Node* node = &roots_.root(suffix);
 
-        find_leaf_branch(node, reminder, noop);
-        if (reminder.len() > detail::stride_m_1) {
+        find_leaf_branch(node, suffix, noop);
+        if (suffix.len() > detail::stride_m_1) {
             return end();
         }
 
         uint8_t vec_idx;
-        if (!node->internal_bitmap.exists(vec_idx, reminder)) {
+        if (!node->internal_bitmap.exists(vec_idx, suffix)) {
             return end();
         }
 
@@ -913,10 +954,10 @@ public:
 
     /// Match longest prefix
     std::optional<std::pair<uint8_t, T>> match_longest(Bits<P> prefix) const noexcept {
-        detail::Node* node = &root_;
+        detail::Node* node = &roots_.root(prefix);
 
         std::optional<std::pair<uint8_t, T>> longest;
-        uint8_t offset = 0;
+        uint8_t offset = Iar::len;
         auto const update_longest = [&longest, &offset](auto node, auto slice) {
             uint8_t vec_idx = 0;
             if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
@@ -942,12 +983,13 @@ public:
 
     /// Counterpart of `match_longest` which returns an iterator
     /// \throw std::bad_alloc
+    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0>>* = nullptr>
     Iterator<P, T> find_longest(Bits<P> prefix) const noexcept(false) {
-        detail::Node* node = &root_;
-        auto reminder = prefix;
+        auto suffix = prefix;
+        detail::Node* node = &roots_.root(suffix);
 
         std::optional<std::pair<uint8_t, detail::Node>> longest;
-        uint8_t offset = 0;
+        uint8_t offset = Iar::len;
         auto const update_longest = [&longest, &offset](auto node, auto slice) {
             uint8_t vec_idx;
             if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
@@ -956,9 +998,9 @@ public:
             offset += detail::stride;
         };
 
-        find_leaf_branch(node, reminder, update_longest);
-        if (reminder.len() < detail::stride) {
-            update_longest(*node, reminder);
+        find_leaf_branch(node, suffix, update_longest);
+        if (suffix.len() < detail::stride) {
+            update_longest(*node, suffix);
         }
 
         if (longest) {
@@ -971,7 +1013,7 @@ public:
     /// Erase exact prefix
     /// \throw Forwards `Alloc::realloc` exception
     bool erase_exact(Bits<P> prefix) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
-        detail::Node* node = &root_;
+        detail::Node* node = &roots_.root(prefix);
         auto reminder = prefix;
 
         find_leaf_branch(node, reminder, noop);
@@ -1005,32 +1047,36 @@ public:
     }
 
     ~ByeTrie() noexcept {
-        detail::RecyclingStack stack;
-        stack.push(root_);
-        while (!stack.empty()) { // DFS traversal
-            auto const node = stack.pop();
-            detail::NodeVec vec{node.children,
-                                node.external_bitmap.total(),
-                                node.internal_bitmap.total()};
-            for (auto child : vec.branches()) {
-                stack.push(child.node);
+        for (auto root : roots_.roots()) {
+            detail::RecyclingStack stack;
+            stack.push(root);
+            while (!stack.empty()) { // DFS traversal
+                auto const node = stack.pop();
+                detail::NodeVec vec{node.children,
+                                    node.external_bitmap.total(),
+                                    node.internal_bitmap.total()};
+                for (auto child : vec.branches()) {
+                    stack.push(child.node);
+                }
+                if (vec.size()) {
+                    stack.recycle(vec.get_inner());
+                }
             }
-            if (vec.size()) {
-                stack.recycle(vec.get_inner());
-            }
+            stack.for_each_useless([this](auto blk) { alloc_.dealloc(blk); });
+            stack.for_each_free([this](auto blk) { alloc_.dealloc(blk); });
         }
-        stack.for_each_useless([this](auto blk) { alloc_.dealloc(blk); });
-        stack.for_each_free([this](auto blk) { alloc_.dealloc(blk); });
     }
 
     Alloc& alloc() noexcept {
         return alloc_;
     }
 
+    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0>>* = nullptr>
     Iterator<P, T> begin() const noexcept(false) {
-        return Iterator<P, T>{root_, Bits<P>{0, 0}};
+        return Iterator<P, T>{roots_.root(Bits<P>{}), Bits<P>{0, 0}};
     }
 
+    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0>>* = nullptr>
     Iterator<P, T> end() const noexcept(false) {
         return Iterator<P, T>{{}, {}};
     }
@@ -1106,7 +1152,7 @@ private:
                            + (sizeof(P) * CHAR_BIT % detail::stride > 0)>
                 stack;
 
-        detail::Node* node = &root_;
+        detail::Node* node = &roots_.root(prefix);
         auto reminder = prefix;
 
         size_t level = 0;
@@ -1145,7 +1191,7 @@ private:
 
 private:
     Alloc alloc_;
-    detail::Node mutable root_;
+    Iar mutable roots_;
     size_t size_{0};
 };
 
