@@ -1,10 +1,11 @@
-cmake_minimum_required(VERSION 3.26.4)
+cmake_minimum_required(VERSION 3.22.1)
 
 project(bye_trie VERSION 0.1)
 
-option(${PROJECT_NAME}_TESTS "Enable tests" OFF)
-option(${PROJECT_NAME}_BENCHMARKS "Enable benchmarks" OFF)
-option(${PROJECT_NAME}_BOOST_IP "Enable boost::asio::ip::network" OFF)
+option(${PROJECT_NAME}_TESTS "Enable tests" ON)
+option(${PROJECT_NAME}_BENCHMARKS "Enable benchmarks" ON)
+option(${PROJECT_NAME}_BOOST_IP "Enable boost::asio::ip::network" ON)
+option(${PROJECT_NAME}_DOC "Enable documentation" ON)
 
 # if inside subdirectory of another project
 if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
@@ -33,19 +34,12 @@ if(${PROJECT_NAME}_BOOST_IP)
 endif()
 
 
-function(set_target_build_settings target standard)
+function(set_target_build_settings target)
     if(NOT TARGET ${target})
         message(FATAL_ERROR "Not target ${target}")
     endif()
 
-    # test if the c++ standard is supported
-    include(CheckCXXCompilerFlag)
-    check_cxx_compiler_flag("-std=c++${standard}" COMPILER_SUPPORTS_CXX${standard})
-    if(NOT COMPILER_SUPPORTS_CXX${standard})
-        message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++${standard} support.")
-    endif()
-
-    set_target_properties(${target} PROPERTIES CXX_STANDARD ${standard})
+    set_target_properties(${target} PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
 
     set(sancov_flags --coverage -fsanitize=address -fsanitize=undefined -fsanitize=leak
         -fsanitize-address-use-after-scope
@@ -125,14 +119,18 @@ if(${PROJECT_NAME}_BENCHMARKS)
     add_custom_target(data DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/uniq_pfx_asn_dfz.csv)
     add_executable(bench_ipv4_networks bench/ipv4_networks.cpp)
     target_link_libraries(bench_ipv4_networks PRIVATE ${PROJECT_NAME})
-    set_target_build_settings(bench_ipv4_networks 23)
+    set_target_build_settings(bench_ipv4_networks)
     add_dependencies(bench_ipv4_networks data)
 
     add_executable(bench_throughput bench/throughput.cpp)
     target_link_libraries(bench_throughput PRIVATE ${PROJECT_NAME})
-    set_target_build_settings(bench_throughput 23)
+    set_target_build_settings(bench_throughput)
 
     add_executable(bench_throughput_iar16 bench/throughput_iar16.cpp)
     target_link_libraries(bench_throughput_iar16 PRIVATE ${PROJECT_NAME})
-    set_target_build_settings(bench_throughput_iar16 23)
+    set_target_build_settings(bench_throughput_iar16)
+endif()
+
+if(${PROJECT_NAME}_DOC)
+    add_subdirectory(doc)
 endif()
