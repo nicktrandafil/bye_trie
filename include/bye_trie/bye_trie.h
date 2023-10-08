@@ -43,6 +43,9 @@ static_assert(sizeof(void*) == 8, "64-bit only");
 
 namespace bye_trie {
 
+/// @defgroup group-datatypes Data types
+/// Data types provided by the library.
+
 struct MemBlk {
     bool operator==(MemBlk const&) const noexcept = default;
     void* ptr;
@@ -153,10 +156,10 @@ private:
 
 namespace detail {
 
-/// Slice of prefix used to index branches of a node
+/// Slice of prefix used to index branches of a node.
 inline constexpr uint8_t stride = 5; // bits
 
-/// Slice of prefix used to index values of a node
+/// Slice of prefix used to index values of a node.
 /// It is one shorter than `stride` because `stride`-length prefixes are
 /// stored as 0-length prefixes in one node down.
 inline constexpr uint8_t stride_m_1 = 4; // bits
@@ -567,11 +570,9 @@ private:
     std::span<ErasedNode> inner;
 };
 
-/// Stack of `Node`s
-///
+/// Stack of `Node`s.
 /// The stack has preallocated memory to to hold 32 `Node`s. It can recycle
 /// memory to hold more `Node`s.
-///
 /// \note During trie destruction this stack is used to traverse the trie
 /// without allocating additional memory but rather reusing the memory being
 /// freed during the destruction. One can mathematically prove that this stack
@@ -809,7 +810,7 @@ private:
     std::vector<State> states;
 };
 
-/// Initial Array Optimization of size 65536
+/// Initial Array Optimization of size 65536.
 class Iar16 {
 public:
     static constexpr uint8_t len = 16;
@@ -829,7 +830,7 @@ private:
     std::array<detail::Node, 1 << len> roots_;
 };
 
-/// No initial array optimization
+/// No initial array optimization.
 class Iar0 {
 public:
     static constexpr uint8_t len = 0;
@@ -846,6 +847,9 @@ private:
     detail::Node root_;
 };
 
+/// Bits Trie.
+/// Trie data structure with alphabet of just 0 and 1.
+/// \ingroup group-datatypes
 template <UnsignedIntegral P,
           TrivialLittleObject T,
           Allocator Alloc = SystemAllocator,
@@ -880,7 +884,7 @@ public:
         return *this;
     }
 
-    /// Insert only if the exact prefix is not present
+    /// Insert only if the exact prefix is not present.
     /// \post Strong exception guarantee
     /// \return Existing value
     /// \throw Forwards `Alloc::realloc` exception
@@ -893,7 +897,7 @@ public:
         return prev ? std::optional(std::bit_cast<T>(*prev)) : std::nullopt;
     }
 
-    /// Replace the exact prefix is present otherwise insert
+    /// Replace the exact prefix is present otherwise insert.
     /// \post Strong exception guarantee
     /// \return Previous value
     /// \throw Forwards `Alloc::realloc` exception
@@ -912,7 +916,7 @@ public:
         }
     }
 
-    /// Match exact prefix
+    /// Match exact prefix.
     std::optional<T> match_exact(Bits<P> prefix) const noexcept {
         detail::Node* node = &roots_.root(prefix);
 
@@ -932,7 +936,7 @@ public:
                                         .value(vec_idx));
     }
 
-    /// Counterpart of `match_exact` which returns an iterator
+    /// Counterpart of `match_exact` which returns an iterator.
     /// \throw std::bad_alloc
     template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0>>* = nullptr>
     Iterator<P, T> find_exact(Bits<P> prefix) const noexcept(false) {
@@ -952,7 +956,7 @@ public:
         return Iterator<P, T>{*node, prefix};
     }
 
-    /// Match longest prefix
+    /// Match longest prefix.
     std::optional<std::pair<uint8_t, T>> match_longest(Bits<P> prefix) const noexcept {
         detail::Node* node = &roots_.root(prefix);
 
@@ -981,7 +985,7 @@ public:
         return longest;
     }
 
-    /// Counterpart of `match_longest` which returns an iterator
+    /// Counterpart of `match_longest` which returns an iterator.
     /// \throw std::bad_alloc
     template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0>>* = nullptr>
     Iterator<P, T> find_longest(Bits<P> prefix) const noexcept(false) {
@@ -1010,7 +1014,7 @@ public:
         }
     }
 
-    /// Erase exact prefix
+    /// Erase exact prefix.
     /// \throw Forwards `Alloc::realloc` exception
     bool erase_exact(Bits<P> prefix) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
         detail::Node* node = &roots_.root(prefix);

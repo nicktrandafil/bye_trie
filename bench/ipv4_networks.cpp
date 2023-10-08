@@ -28,7 +28,6 @@
 #include <fstream>
 #include <iostream>
 #include <random>
-#include <ranges>
 #include <vector>
 
 using namespace bye_trie;
@@ -98,44 +97,52 @@ int main() {
     }
 
     {
-        auto const rounds = std::views::repeat(32) | std::views::take(100);
-        auto const first_byte = std::views::iota(0u, 255u + 1);
-        auto const second_byte = std::views::iota(0u, 255u + 1);
+        auto constexpr a = 100u;
+        auto constexpr b = 255u + 1;
+        auto constexpr c = 255u + 1;
 
         std::array<unsigned, 10> third_byte;
-        std::ranges::generate(third_byte, [] {
+        std::generate(third_byte.begin(), third_byte.end(), [] {
             static std::uniform_int_distribution<unsigned> distr{1, 6};
             static std::mt19937 engine{0};
             return distr(engine);
         });
 
-        auto const networks =
-                std::views::cartesian_product(rounds, first_byte, second_byte, third_byte)
-                | std::views::transform([](auto const& x) {
-                      auto const [len, first, second, third] = x;
-                      auto const bits = Bits{first, 8}
-                                                .concatenated(Bits{second, 8})
-                                                .concatenated(Bits{third, 8})
-                                                .concatenated(Bits{first, 8});
-                      return make_network_v4(make_address_v4(bits.bits()), len);
-                  });
+        auto const iter = [third_byte](auto f) {
+            for (auto i = 0u; i < a; ++i) {
+                for (auto first = 0u; first < b; ++first) {
+                    for (auto second = 0u; second < c; ++second) {
+                        for (auto third : third_byte) {
+                            auto const network = make_network_v4(
+                                    make_address_v4(Bits{first, 8}
+                                                            .concatenated(Bits{second, 8})
+                                                            .concatenated(Bits{third, 8})
+                                                            .concatenated(Bits{first, 8})
+                                                            .bits()),
+                                    32);
+                            f(network);
+                        }
+                    }
+                }
+            }
+        };
 
         std::cout << "average match_longest time (prefix_len=32): "
                   << per_network(benchmark([&] {
-                                     for (auto const& network : networks) {
+                                     iter([&trie](auto network) {
                                          do_not_optimize(trie.match_longest(network));
-                                     }
+                                     });
                                  }),
-                                 networks.size())
+                                 100 * 256 * 256 * third_byte.size())
                   << "\n";
 
         std::cout << "average match_exact time (prefix_length=32): "
                   << per_network(benchmark([&] {
-                                     for (auto const& network : networks) {
+                                     iter([&trie](auto network) {
                                          do_not_optimize(trie.match_exact(network));
-                                     }
+                                     });
                                  }),
-                                 networks.size())
+                                 100 * 256 * 256 * third_byte.size())
                   << "\n";
     }
 }

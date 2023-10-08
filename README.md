@@ -1,3 +1,7 @@
+[![Build Status](https://github.com/nicktrandafil/bye_trie/actions/workflows/main_ci.yml/badge.svg?branch=main)](https://github.com/nicktrandafil/bye_trie/actions/workflows/main_ci.yml)
+[![codecov](https://codecov.io/gh/nicktrandafil/bye_trie/branch/main/graph/badge.svg)](https://codecov.io/gh/nicktrandafil/bye_trie)
+[![Documentation](https://img.shields.io/badge/docs-doxygen-blue.svg)](https://nicktrandafil.github.io/bye_trie)
+
 # ByeTrie is bits trie data structure
 
 ByeTrie is a trie data structure where keys are bit strings. It is based on the [Tree Bitmap : Hardware/Software IP Lookups with
@@ -7,12 +11,27 @@ The goal of this implementation is to be space and time efficient as much as pos
 
 # Benchmarks
 
-Internet's IPv4 prefixes and ASNs (about 893k) are used as test data. The results are:
+Internet's IPv4 prefixes and ASNs (about 893k) are used to benchmark times. The results are:
 
 * peak memory consumption: 6MB
-* average insert time: 73ns
-* average match_longest time of 32bit prefixes: 26ns
-* average match_exact time of 32bit prefixes: 10ns
+* average insert time: 72ns
+* average match_longest time of 32bit prefixes: 25ns
+* average match_exact time of 32bit prefixes: 9ns
+
+The trie is filled with all prefixes up to length 23. Then on top of that 10M random 24 bit
+prefixes inserted. Then benchmark performed for 10M random 32bit prefix inserts and searches.
+The results are:
+
+* average insert throughput of 32bit prefixes: 6MB/s
+* average insert throughput of 32bit prefixes with IAR16 optimization: 8MB/s
+* average match_longest throughput of 32bit prefixes: 10MB/s
+* average match_longest throughput of 32bit prefixes with IAR16 optimization: 25MB/s
+* average match_exact throughput of 32bit prefixes: 35MB/s
+* average match_exact throughput of 32bit prefixes with IAR16 optimization: 58MB/s
+
+where IAR optimization stands for Initial Array Optimization. In this particular case the array of size 2^16 is used.
+All 16bit prefixes are stored in the contiguous array rather than organized in the trie. This reduces by 16/5 memory accesses giving away the
+ability to store prefixes with lengths less than 16bit and consuming a bit more memory.
 
 The tests are done on i7-1185G7 @ 3.00GHz laptop CPU.
 
