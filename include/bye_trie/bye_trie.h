@@ -156,19 +156,24 @@ private:
 
 namespace detail {
 
-/// Slice of prefix used to index branches of a node.
-inline constexpr uint8_t stride = 5; // bits
-
-/// Slice of prefix used to index values of a node.
-/// It is one shorter than `stride` because `stride`-length prefixes are
-/// stored as 0-length prefixes in one node down.
-inline constexpr uint8_t stride_m_1 = 4; // bits
-
-class StrideM1 {
+template <uint8_t N>
+class Stride {
 public:
+    static constexpr uint8_t bits_count = N;
+    static constexpr uint8_t index_count = 1 << bits_count;
+    using IndexType = decltype([] {
+        if constexpr (N <= 5) {
+            return uint32_t{};
+        } else if (N == 6) {
+            return uint64_t{};
+        } else {
+            static_assert(N + 1 == N, "not supported");
+        }
+    }());
+
     template <class T>
-    /*implicit*/ StrideM1(Bits<T> bits) noexcept {
-        assert(bits.len() <= stride_m_1);
+    /*implicit*/ Stride(Bits<T> bits) noexcept {
+        assert(bits.len() <= bits_count);
         inner = {static_cast<uint8_t>(bits.bits()), bits.len()};
     }
 
@@ -188,27 +193,20 @@ private:
     Bits<uint8_t> inner;
 };
 
-class Stride {
-public:
-    template <class T>
-    /*implicit*/ Stride(Bits<T> bits) noexcept {
-        assert(bits.len() <= stride);
-        inner = {static_cast<uint8_t>(bits.bits()), bits.len()};
-    }
-
-    uint8_t value() const noexcept {
-        return inner.value();
-    }
-
-private:
-    Bits<uint8_t> inner;
-};
-
 // 0|0000000000000000|00000000|0000|00|0
 //                 16        8    4  2 1
 //                          15    7  3 1
+template <uint8_t N>
 class InternalBitmap {
 public:
+    constexpr static uint8_t index_count = [] {
+        uint8_t ret = 0;
+        for (uint8_t i = 0; i <= Stride<N - 1>::bits_count; ++i) {
+            ret += 1 << i;
+        }
+        return ret;
+    }();
+
     InternalBitmap() = default;
 
     explicit InternalBitmap(uint32_t inner) noexcept
@@ -216,7 +214,7 @@ public:
     }
 
     std::optional<uint8_t> find_longest(uint8_t& values_before,
-                                        StrideM1 bits) const noexcept {
+                                        Stride<N - 1> bits) const noexcept {
         switch (bits.len()) {
         case 4:
             if (auto const idx = (1u << (15 + (bits.bits() & 0b1111))); inner & idx) {
@@ -251,9 +249,9 @@ public:
         return std::nullopt;
     }
 
-    bool exists(uint8_t& values_before, StrideM1 bits) const noexcept {
+    bool exists(uint8_t& values_before, Stride<N - 1> bits) const noexcept {
         switch (bits.len()) {
-        [[likely]] case 4: {
+        case 4: {
             auto const idx = (1u << (15 + bits.value()));
             values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
             return inner & idx;
@@ -285,7 +283,7 @@ public:
         return static_cast<uint8_t>(std::popcount(inner));
     }
 
-    void set(StrideM1 bits) {
+    void set(Stride<N - 1> bits) {
         switch (bits.len()) {
         case 4:
             inner |= (1u << (15 + bits.value()));
@@ -305,7 +303,7 @@ public:
         }
     }
 
-    void unset(StrideM1 bits) {
+    void unset(Stride<N - 1> bits) {
         switch (bits.len()) {
         case 4:
             inner &= ~(1u << (15 + bits.value()));
@@ -330,9 +328,10 @@ public:
     }
 
 private:
-    uint32_t inner;
+    Stride<N - 1>::IndexType inner;
 };
 
+template <uint8_t N>
 class ExternalBitmap {
 public:
     ExternalBitmap() = default;
@@ -341,11 +340,11 @@ public:
             : inner{inner} {
     }
 
-    bool exists(Stride x) const noexcept {
+    bool exists(Stride<N> x) const noexcept {
         return (inner >> x.value()) & 1;
     }
 
-    uint8_t before(Stride x) const noexcept {
+    uint8_t before(Stride<N> x) const noexcept {
         return static_cast<uint8_t>(std::popcount(((1u << x.value()) - 1) & inner));
     }
 
@@ -353,45 +352,41 @@ public:
         return static_cast<uint8_t>(std::popcount(inner));
     }
 
-    void set(Stride x) {
+    void set(Stride<N> x) {
         inner |= 1u << x.value();
     }
 
-    void unset(Stride x) {
+    void unset(Stride<N> x) {
         inner &= ~(1u << x.value());
     }
 
 private:
-    uint32_t inner;
+    Stride<N>::IndexType inner;
 };
 
+template <uint8_t N>
 union ErasedNode;
 
+template <uint8_t N>
 struct Node {
-    InternalBitmap internal_bitmap;
-    ExternalBitmap external_bitmap;
-    ErasedNode* children;
+    InternalBitmap<N> internal_bitmap;
+    ExternalBitmap<N> external_bitmap;
+    ErasedNode<N>* children;
 };
 
-static_assert(sizeof(Node) == 16);
+static_assert(sizeof(Node<5>) == 16);
 
-struct TwoPointers {
-    void*& operator[](size_t i) & noexcept {
-        return inner[i];
-    }
-
-    std::array<void*, 2> inner;
-};
-
+template <uint8_t N>
 union ErasedNode {
-    Node node;
-    TwoPointers pointers;
+    constexpr static size_t pointer_count = sizeof(Node<N>) / 8;
+    Node<N> node;
+    std::array<void*, pointer_count> pointers;
 };
 
 template <class T>
 concept Trivial = std::is_trivial_v<T>;
 
-template <Trivial T, size_t Capacity = 31 + 1 /*sentinel*/>
+template <Trivial T, size_t Capacity>
 class StaticVec {
 public:
     using Storage = std::array<T, Capacity>;
@@ -409,12 +404,12 @@ public:
     }
 
     T& operator[](size_t i) noexcept {
-        assert(i <= size_); // `=` thanks to sentinel
+        assert(i <= size_); // `=` thanks to sentinel-1
         return storage_[i];
     }
 
     T operator[](size_t i) const noexcept {
-        assert(i <= size_); // `=` thanks to sentinel
+        assert(i <= size_); // `=` thanks to sentinel-1
         return storage_[i];
     }
 
@@ -427,14 +422,17 @@ private:
     Storage storage_;
 };
 
+template <uint8_t N>
 class NodeVec {
 public:
-    NodeVec(ErasedNode* ptr, uint8_t branches_count, uint8_t values_count) noexcept
+    NodeVec(ErasedNode<N>* ptr, uint8_t branches_count, uint8_t values_count) noexcept
             : branches_count{branches_count}
             , values_count{values_count}
-            , inner{std::span{ptr,
-                              static_cast<size_t>(branches_count + values_count / 2
-                                                  + values_count % 2)}} {
+            , inner{std::span{
+                      ptr,
+                      static_cast<size_t>(
+                              branches_count + values_count / ErasedNode<N>::pointer_count
+                              + (values_count % ErasedNode<N>::pointer_count != 0))}} {
     }
 
     NodeVec(NodeVec const&) = delete;
@@ -442,14 +440,14 @@ public:
 
     /// \throw Forwards `Alloc::realloc` exception
     template <class Alloc>
-    ErasedNode* insert_branch(uint8_t i, Node branch, Alloc& alloc) noexcept(
+    ErasedNode<N>* insert_branch(uint8_t i, Node<N> branch, Alloc& alloc) noexcept(
             noexcept(alloc.realloc(MemBlk{}, 0))) {
         assert(i <= branches_count);
-        auto const old_size = inner.size() * sizeof(ErasedNode);
-        auto const new_size = old_size + sizeof(ErasedNode);
+        auto const old_size = inner.size() * sizeof(ErasedNode<N>);
+        auto const new_size = old_size + sizeof(ErasedNode<N>);
         auto const blk = alloc.realloc(MemBlk{inner.data(), old_size}, new_size);
         branches_count += 1;
-        inner = std::span{static_cast<ErasedNode*>(blk.ptr), inner.size() + 1};
+        inner = std::span{static_cast<ErasedNode<N>*>(blk.ptr), inner.size() + 1};
         std::rotate(inner.begin() + i, inner.end() - 1, inner.end());
         inner[i].node = branch;
         return inner.data();
@@ -457,15 +455,15 @@ public:
 
     /// \throw Forwards `Alloc::realloc` exception
     template <class Alloc>
-    ErasedNode* insert_value(uint8_t i, void* value, Alloc& alloc) noexcept(
+    ErasedNode<N>* insert_value(uint8_t i, void* value, Alloc& alloc) noexcept(
             noexcept(alloc.realloc(MemBlk{}, 0))) {
         assert(i <= values_count);
 
-        if (values_count % 2 == 0) {
-            auto const old_size = inner.size() * sizeof(ErasedNode);
-            auto const new_size = old_size + sizeof(ErasedNode);
+        if (values_count % ErasedNode<N>::pointer_count == 0) {
+            auto const old_size = inner.size() * sizeof(ErasedNode<N>);
+            auto const new_size = old_size + sizeof(ErasedNode<N>);
             auto const blk = alloc.realloc(MemBlk{inner.data(), old_size}, new_size);
-            inner = std::span{static_cast<ErasedNode*>(blk.ptr), inner.size() + 1};
+            inner = std::span{static_cast<ErasedNode<N>*>(blk.ptr), inner.size() + 1};
             inner.back().pointers = {};
         }
 
@@ -479,7 +477,8 @@ public:
                     bytes.end() - 1 * value_size,
                     bytes.end());
 
-        values[i / 2].pointers[i % 2] = value;
+        values[i / ErasedNode<N>::pointer_count]
+                .pointers[i % ErasedNode<N>::pointer_count] = value;
 
         return inner.data();
     }
@@ -491,10 +490,10 @@ public:
         assert(i < branches_count);
         assert(branches_count > 0);
         std::rotate(inner.begin() + i, inner.begin() + i + 1, inner.end());
-        auto const old_size = inner.size() * sizeof(ErasedNode);
-        auto const new_size = old_size - sizeof(ErasedNode);
+        auto const old_size = inner.size() * sizeof(ErasedNode<N>);
+        auto const new_size = old_size - sizeof(ErasedNode<N>);
         auto const blk = alloc.realloc(MemBlk{inner.data(), old_size}, new_size);
-        inner = std::span{static_cast<ErasedNode*>(blk.ptr), inner.size() - 1};
+        inner = std::span{static_cast<ErasedNode<N>*>(blk.ptr), inner.size() - 1};
         branches_count -= 1;
     }
 
@@ -509,18 +508,19 @@ public:
         auto const bytes = as_writable_bytes(values);
 
         constexpr auto value_size = sizeof(void*);
-        auto const ret = values[i / 2].pointers[i % 2];
+        auto const ret = values[i / ErasedNode<N>::pointer_count]
+                                 .pointers[i % ErasedNode<N>::pointer_count];
         std::rotate(bytes.begin() + i * value_size,
                     bytes.begin() + (i + 1) * value_size,
                     bytes.end());
 
         values_count -= 1;
 
-        if (values_count % 2 == 0) {
-            auto const old_size = inner.size() * sizeof(ErasedNode);
-            auto const new_size = old_size - sizeof(ErasedNode);
+        if (values_count % ErasedNode<N>::pointer_count == 0) {
+            auto const old_size = inner.size() * sizeof(ErasedNode<N>);
+            auto const new_size = old_size - sizeof(ErasedNode<N>);
             auto const blk = alloc.realloc(MemBlk{inner.data(), old_size}, new_size);
-            inner = std::span{static_cast<ErasedNode*>(blk.ptr), inner.size() - 1};
+            inner = std::span{static_cast<ErasedNode<N>*>(blk.ptr), inner.size() - 1};
         }
 
         return ret;
@@ -528,27 +528,34 @@ public:
 
     void*& value(uint8_t i) const noexcept {
         assert(i < values_count);
-        return inner[branches_count + i / 2].pointers[i % 2];
+        return inner[branches_count + i / ErasedNode<N>::pointer_count]
+                .pointers[i % ErasedNode<N>::pointer_count];
     }
 
-    std::span<ErasedNode> branches() const noexcept {
+    std::span<ErasedNode<N>> branches() const noexcept {
         return inner.subspan(0, branches_count);
     }
 
-    StaticVec<void*> values() const noexcept {
-        assert(values_count <= 31);
-        StaticVec<void*> ret(values_count);
+    auto values() const noexcept {
+        assert(values_count <= InternalBitmap<N>::index_count);
+        StaticVec<void*,
+                  InternalBitmap<N>::index_count
+                          + InternalBitmap<N>::index_count
+                                    % ErasedNode<N>::pointer_count /*sentinel-1*/>
+                ret(values_count);
         auto const src = inner.subspan(branches_count);
         auto i = 0u;
         for (auto x : src) {
-            ret[i * 2] = x.pointers[0];
-            ret[i * 2 + 1] = x.pointers[1]; // sentinel makes it safe
+            [&]<auto... I>(std::index_sequence<I...>) {
+                // sentinel-1 makes it safe the cases I != 0 safe
+                ((ret[i * 2 + I] = x.pointers[I]), ...);
+            }(std::make_index_sequence<ErasedNode<N>::pointer_count>{});
             i += 1;
         }
         return ret;
     }
 
-    ErasedNode* data() const noexcept {
+    ErasedNode<N>* data() const noexcept {
         return inner.data();
     }
 
@@ -560,26 +567,32 @@ public:
         return inner.size_bytes();
     }
 
-    std::span<ErasedNode> get_inner() const noexcept {
+    std::span<ErasedNode<N>> get_inner() const noexcept {
         return inner;
     }
 
 private:
     uint8_t branches_count;
     uint8_t values_count;
-    std::span<ErasedNode> inner;
+    std::span<ErasedNode<N>> inner;
 };
 
 /// Stack of `Node`s.
-/// The stack has preallocated memory to to hold 32 `Node`s. It can recycle
-/// memory to hold more `Node`s.
+/// The stack has preallocated memory to to hold `Stride::index_count` `Node`s. It can
+/// recycle memory to hold more `Node`s.
+///
 /// \note During trie destruction this stack is used to traverse the trie
 /// without allocating additional memory but rather reusing the memory being
 /// freed during the destruction. One can mathematically prove that this stack
 /// won't go out of memory in the algorithm.
+///
+/// \details The first element of contiguous array of 16 byte items
+/// store meta, the rest store usable data, thus the resident array has size
+/// `Stride::index_count` + 1.
+template <uint8_t N>
 class RecyclingStack {
 public:
-    void recycle(std::span<ErasedNode> nodes) noexcept {
+    void recycle(std::span<ErasedNode<N>> nodes) noexcept {
         assert(nodes.size() > 0);
         if (auto const size = static_cast<uint32_t>(nodes.size()); size == 1) {
             useless_head = new (nodes.data()) Cell{Block{1, 1, useless_head}};
@@ -590,7 +603,7 @@ public:
         }
     }
 
-    void push(Node node) noexcept {
+    void push(Node<N> node) noexcept {
         if (used_head->block.capacity > used_head->block.size) {
             used_head[used_head->block.size++].node = node;
             return;
@@ -605,7 +618,7 @@ public:
         push(node);
     }
 
-    Node pop() noexcept {
+    Node<N> pop() noexcept {
         if (used_head->block.size > 1) {
             return used_head[--used_head->block.size].node;
         }
@@ -622,7 +635,7 @@ public:
     void for_each_useless(auto f) noexcept {
         for (auto block = useless_head; block != nullptr;) {
             auto const next = block->block.next;
-            f(MemBlk{block, block->block.capacity * sizeof(Node)});
+            f(MemBlk{block, block->block.capacity * sizeof(Node<N>)});
             block = next;
         }
     }
@@ -630,7 +643,7 @@ public:
     void for_each_free(auto f) noexcept {
         for (auto block = free_head; block != nullptr;) {
             auto const next = block->block.next;
-            f(MemBlk{block, block->block.capacity * sizeof(Node)});
+            f(MemBlk{block, block->block.capacity * sizeof(Node<N>)});
             block = next;
         }
     }
@@ -647,23 +660,23 @@ private:
         uint32_t size;
         Cell* next;
     };
-    static_assert(sizeof(Block) == 16);
 
     union Cell {
         Block block;
-        Node node;
+        Node<N> node;
     };
-    static_assert(sizeof(Cell) == 16);
+    static_assert(sizeof(Cell) == sizeof(Node<N>));
 
-    std::array<Cell, 33> resident{};
-    Cell* used_head{new (resident.data()) Cell{.block = Block{33, 1, nullptr}}};
+    std::array<Cell, Stride<5>::index_count + 1 /*meta*/> resident{};
+    Cell* used_head{new (resident.data()) Cell{
+            .block = Block{static_cast<uint8_t>(resident.size()), 1, nullptr}}};
     Cell* useless_head{nullptr};
     Cell* free_head{nullptr};
 };
 
 template <class T>
 inline constexpr uint8_t leaf_pos(Bits<T> prefix) noexcept {
-    return prefix.len() - prefix.len() % detail::stride;
+    return prefix.len() - prefix.len() % detail::Stride<5>::bits_count;
 }
 
 } // namespace detail
@@ -693,7 +706,7 @@ concept Allocator = std::is_nothrow_move_constructible_v<T>
                         noexcept(alloc.dealloc(MemBlk{}));
                     };
 
-template <UnsignedIntegral P, TrivialLittleObject T>
+template <UnsignedIntegral P, TrivialLittleObject T, uint8_t N>
 class SubsIterator {
 public:
     using iterator_category = std::input_iterator_tag;
@@ -731,7 +744,7 @@ public:
             // find next prefix in current node
             {
                 auto slice = fixed_bits.concatenated(value_iter_bits);
-                while (slice.len() < detail::stride) {
+                while (slice.len() < detail::Stride<5>::bits_count) {
                     uint8_t vec_idx;
                     if (node.internal_bitmap.exists(vec_idx, slice)) {
                         return *this;
@@ -744,13 +757,13 @@ public:
             // go to next child
             {
                 auto slice = fixed_bits.concatenated(child_iter_bits);
-                while (slice.len() <= detail::stride
+                while (slice.len() <= detail::Stride<5>::bits_count
                        && !node.external_bitmap.exists(slice)) {
                     ++child_iter_bits;
                     slice = fixed_bits.concatenated(child_iter_bits);
                 }
 
-                if (slice.len() <= detail::stride) {
+                if (slice.len() <= detail::Stride<5>::bits_count) {
                     auto const branches = detail::NodeVec{node.children,
                                                           node.external_bitmap.total(),
                                                           0}
@@ -759,7 +772,7 @@ public:
                     prefix = prefix.concatenated(slice);
                     node = branches[node.external_bitmap.before(slice)].node;
                     fixed_bits = value_iter_bits = {};
-                    child_iter_bits = Bits<P>{0, detail::stride};
+                    child_iter_bits = Bits<P>{0, detail::Stride<5>::bits_count};
                     continue;
                 }
             }
@@ -769,7 +782,7 @@ public:
                 node = path.back().node;
                 prefix = path.back().prefix;
                 fixed_bits = path.back().fixed_bits;
-                value_iter_bits = Bits<P>(0, detail::stride - fixed_bits.len());
+                value_iter_bits = Bits<P>(0, detail::Stride<5>::bits_count - fixed_bits.len());
                 child_iter_bits = path.back().child_iter_bits;
                 ++child_iter_bits;
                 path.pop_back();
@@ -789,19 +802,19 @@ public:
     }
 
 private:
-    template <UnsignedIntegral, TrivialLittleObject, Allocator, class>
+    template <UnsignedIntegral, TrivialLittleObject, Allocator, uint8_t, class>
     friend class ByeTrie;
 
-    template <UnsignedIntegral, TrivialLittleObject>
+    template <UnsignedIntegral, TrivialLittleObject, uint8_t>
     friend class ByeTrieSubs;
 
-    explicit SubsIterator(detail::Node node, Bits<P> prefix) noexcept(false)
+    explicit SubsIterator(detail::Node<N> node, Bits<P> prefix) noexcept(false)
             : node{node} {
         std::tie(this->prefix, this->fixed_bits) =
                 prefix.split_at(detail::leaf_pos(prefix));
-        assert(fixed_bits.len() < detail::stride);
+        assert(fixed_bits.len() < detail::Stride<5>::bits_count);
         this->value_iter_bits = Bits<P>(0, 0);
-        this->child_iter_bits = Bits<P>(0, detail::stride - this->fixed_bits.len());
+        this->child_iter_bits = Bits<P>(0, detail::Stride<5>::bits_count - this->fixed_bits.len());
         uint8_t vec_idx;
         auto const slice = fixed_bits.concatenated(value_iter_bits);
         if (!node.internal_bitmap.exists(vec_idx, slice)) {
@@ -810,13 +823,13 @@ private:
     }
 
     struct State {
-        detail::Node node;
+        detail::Node<N> node;
         Bits<P> prefix;
         Bits<P> fixed_bits;
         Bits<P> child_iter_bits;
     };
 
-    detail::Node node;
+    detail::Node<N> node;
     Bits<P> prefix;
     Bits<P> fixed_bits;
     Bits<P> value_iter_bits;
@@ -824,37 +837,38 @@ private:
     std::vector<State> path;
 };
 
-template <UnsignedIntegral P, TrivialLittleObject T>
+template <UnsignedIntegral P, TrivialLittleObject T, uint8_t N = 5>
 class ByeTrieSubs {
 public:
-    using ValueType = typename SubsIterator<P, T>::value_type;
+    using ValueType = typename SubsIterator<P, T, N>::value_type;
 
-    SubsIterator<P, T> begin() const noexcept(false) {
+    SubsIterator<P, T, N> begin() const noexcept(false) {
         return begin_;
     }
 
-    SubsIterator<P, T> end() const noexcept(false) {
-        return SubsIterator<P, T>{{}, {}};
+    SubsIterator<P, T, N> end() const noexcept(false) {
+        return SubsIterator<P, T, N>{{}, {}};
     }
 
 private:
-    template <UnsignedIntegral, TrivialLittleObject, Allocator, class>
+    template <UnsignedIntegral, TrivialLittleObject, Allocator, uint8_t, class>
     friend class ByeTrie;
 
-    explicit ByeTrieSubs(detail::Node node, Bits<P> prefix) noexcept(false)
-            : begin_{SubsIterator<P, T>{node, prefix}} {
+    explicit ByeTrieSubs(detail::Node<N> node, Bits<P> prefix) noexcept(false)
+            : begin_{SubsIterator<P, T, N>{node, prefix}} {
     }
 
 private:
-    SubsIterator<P, T> begin_;
+    SubsIterator<P, T, N> begin_;
 };
 
 /// Initial Array Optimization of size 65536.
+template <uint8_t N>
 class Iar16 {
 public:
     static constexpr uint8_t len = 16;
 
-    detail::Node& root(auto& prefix) noexcept {
+    detail::Node<N>& root(auto& prefix) noexcept {
         assert(prefix.len() >= len);
         auto [p, s] = prefix.split_at(len);
         prefix = s;
@@ -866,24 +880,25 @@ public:
     }
 
 private:
-    std::array<detail::Node, 1 << len> roots_;
+    std::array<detail::Node<N>, 1 << len> roots_;
 };
 
 /// No initial array optimization.
+template <uint8_t N>
 class Iar0 {
 public:
     static constexpr uint8_t len = 0;
 
-    detail::Node& root(auto) noexcept {
+    detail::Node<N>& root(auto) noexcept {
         return root_;
     }
 
     auto roots() const noexcept {
-        return std::array<detail::Node, 1>{root_};
+        return std::array<detail::Node<N>, 1>{root_};
     }
 
 private:
-    detail::Node root_;
+    detail::Node<N> root_;
 };
 
 /// Bits Trie.
@@ -892,9 +907,12 @@ private:
 template <UnsignedIntegral P,
           TrivialLittleObject T,
           Allocator Alloc = SystemAllocator,
-          class Iar = Iar0>
+          uint8_t N = 5,
+          class Iar = Iar0<N>>
 class ByeTrie {
 public:
+    using StrideType = detail::Stride<N>;
+
     explicit ByeTrie() noexcept(noexcept(Alloc{}))
             : alloc_{}
             , roots_{} {
@@ -927,7 +945,7 @@ public:
     /// \throw Forwards `Alloc::realloc` exception
     std::optional<T> insert(Bits<P> prefix,
                             T value) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
-        detail::Node* node = &roots_.root(prefix);
+        detail::Node<N>* node = &roots_.root(prefix);
         find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
         auto const prev = match_exact_or_insert(node, prefix, value);
@@ -940,7 +958,7 @@ public:
     /// \throw Forwards `Alloc::realloc` exception
     std::optional<T> replace(Bits<P> prefix,
                              T value) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
-        detail::Node* node = &roots_.root(prefix);
+        detail::Node<N>* node = &roots_.root(prefix);
         find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
         if (auto const old_value = match_exact_or_insert(node, prefix, value)) {
@@ -955,10 +973,10 @@ public:
 
     /// Match exact prefix.
     std::optional<T> match_exact(Bits<P> prefix) const noexcept {
-        detail::Node* node = &roots_.root(prefix);
+        detail::Node<N>* node = &roots_.root(prefix);
 
         find_leaf_branch(node, prefix, noop);
-        if (prefix.len() > detail::stride_m_1) {
+        if (prefix.len() > detail::Stride<4>::bits_count) {
             return std::nullopt;
         }
 
@@ -975,7 +993,7 @@ public:
 
     /// Match longest prefix.
     std::optional<std::pair<uint8_t, T>> match_longest(Bits<P> prefix) const noexcept {
-        detail::Node* node = &roots_.root(prefix);
+        detail::Node<N>* node = &roots_.root(prefix);
 
         std::optional<std::pair<uint8_t, T>> longest;
         uint8_t offset = Iar::len;
@@ -991,11 +1009,11 @@ public:
                                         .value(vec_idx)),
                 };
             }
-            offset += detail::stride;
+            offset += detail::Stride<5>::bits_count;
         };
 
         find_leaf_branch(node, prefix, update_longest);
-        if (prefix.len() < detail::stride) {
+        if (prefix.len() < detail::Stride<5>::bits_count) {
             update_longest(*node, prefix);
         }
 
@@ -1005,11 +1023,11 @@ public:
     /// Erase exact prefix.
     /// \throw Forwards `Alloc::realloc` exception
     bool erase_exact(Bits<P> prefix) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
-        detail::Node* node = &roots_.root(prefix);
+        detail::Node<N>* node = &roots_.root(prefix);
         auto reminder = prefix;
 
         find_leaf_branch(node, reminder, noop);
-        if (reminder.len() > detail::stride_m_1) {
+        if (reminder.len() > detail::Stride<4>::bits_count) {
             return false;
         }
 
@@ -1040,7 +1058,7 @@ public:
 
     ~ByeTrie() noexcept {
         for (auto root : roots_.roots()) {
-            detail::RecyclingStack stack;
+            detail::RecyclingStack<N> stack;
             stack.push(root);
             while (!stack.empty()) { // DFS traversal
                 auto const node = stack.pop();
@@ -1065,60 +1083,62 @@ public:
 
     /// View to sub networks of `prefix`
     /// \throw std::bad_alloc
-    ByeTrieSubs<P, T> subs(Bits<P> prefix) const noexcept(false) {
+    ByeTrieSubs<P, T, N> subs(Bits<P> prefix) const noexcept(false) {
         auto suffix = prefix;
-        detail::Node* node = &roots_.root(suffix);
+        detail::Node<N>* node = &roots_.root(suffix);
 
         find_leaf_branch(node, suffix, noop);
-        if (suffix.len() > detail::stride_m_1) {
-            return ByeTrieSubs<P, T>{{}, prefix};
+        if (suffix.len() > detail::Stride<4>::bits_count) {
+            return ByeTrieSubs<P, T, N>{{}, prefix};
         }
 
-        return ByeTrieSubs<P, T>{*node, prefix};
+        return ByeTrieSubs<P, T, N>{*node, prefix};
     }
 
 private:
     static constexpr auto noop = [](auto...) {};
 
-    static void find_leaf_branch(detail::Node*& node,
+    static void find_leaf_branch(detail::Node<N>*& node,
                                  Bits<P>& prefix,
                                  auto on_node) noexcept {
-        while (prefix.len() >= detail::stride) {
-            on_node(*node, prefix.sub(0, detail::stride_m_1));
-            auto const slice = prefix.sub(0, detail::stride);
+        while (prefix.len() >= detail::Stride<5>::bits_count) {
+            on_node(*node, prefix.sub(0, detail::Stride<4>::bits_count));
+            auto const slice = prefix.sub(0, detail::Stride<5>::bits_count);
             if (node->external_bitmap.exists(slice)) {
                 auto const vec_idx = node->external_bitmap.before(slice);
                 node = &node->children[vec_idx].node;
             } else {
                 break;
             }
-            prefix = prefix.sub(detail::stride);
+            prefix = prefix.sub(detail::Stride<5>::bits_count);
         }
     }
 
     /// \post Strong exception guarantee
     /// \throw Forwards `Alloc::realloc` exception
-    void extend_leaf(detail::Node*& node,
+    void extend_leaf(detail::Node<N>*& node,
                      Bits<P>& prefix) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
-        while (prefix.len() >= detail::stride) {
-            auto const slice = prefix.sub(0, detail::stride);
+        while (prefix.len() >= detail::Stride<5>::bits_count) {
+            auto const slice = prefix.sub(0, detail::Stride<5>::bits_count);
             auto const vec_idx = node->external_bitmap.before(slice);
 
             node->children = detail::NodeVec{node->children,
                                              node->external_bitmap.total(),
                                              node->internal_bitmap.total()}
-                                     .insert_branch(vec_idx, detail::Node{}, alloc_);
+                                     .insert_branch(vec_idx, detail::Node<N>{}, alloc_);
             node->external_bitmap.set(slice);
 
             node = &node->children[vec_idx].node;
-            prefix = prefix.sub(detail::stride);
+            prefix = prefix.sub(detail::Stride<5>::bits_count);
         }
     }
 
     /// \post Strong exception guarantee
     /// \throw Forwards `Alloc::realloc` exception
-    void** match_exact_or_insert(detail::Node*& node, Bits<P> prefix, T value) noexcept(
-            noexcept(alloc_.realloc(MemBlk{}, 0))) {
+    void** match_exact_or_insert(detail::Node<N>*& node,
+                                 Bits<P> prefix,
+                                 T value) noexcept(noexcept(alloc_.realloc(MemBlk{},
+                                                                           0))) {
         detail::NodeVec vec{
                 node->children,
                 node->external_bitmap.total(),
@@ -1143,12 +1163,12 @@ private:
     void erase_cleaning(Bits<P> prefix) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
         assert(match_exact(prefix).has_value());
 
-        std::array<detail::Node*,
-                   sizeof(P) * CHAR_BIT / detail::stride
-                           + (sizeof(P) * CHAR_BIT % detail::stride > 0)>
+        std::array<detail::Node<N>*,
+                   sizeof(P) * CHAR_BIT / detail::Stride<5>::bits_count
+                           + (sizeof(P) * CHAR_BIT % detail::Stride<5>::bits_count > 0)>
                 stack;
 
-        detail::Node* node = &roots_.root(prefix);
+        detail::Node<N>* node = &roots_.root(prefix);
         auto reminder = prefix;
 
         size_t level = 0;
@@ -1167,7 +1187,8 @@ private:
         reminder = prefix;
         while (level--) {
             auto& node = *stack[level];
-            auto const slice = reminder.sub(level * detail::stride, detail::stride);
+            auto const slice = reminder.sub(level * detail::Stride<5>::bits_count,
+                                            detail::Stride<5>::bits_count);
             detail::NodeVec vec{node.children,
                                 node.external_bitmap.total(),
                                 node.internal_bitmap.total()};

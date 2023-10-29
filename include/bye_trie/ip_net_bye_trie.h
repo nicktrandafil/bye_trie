@@ -89,7 +89,7 @@ inline Uint128 reverse_bits_of_bytes(
 
 template <class PrefixType, UnsignedIntegral IntType, TrivialLittleObject T>
 class IpNetSubsIterator {
-    using Inner = SubsIterator<IntType, T>;
+    using Inner = SubsIterator<IntType, T, 5>;
 
 public:
     explicit IpNetSubsIterator(Inner&& x) noexcept(false)

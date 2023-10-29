@@ -51,7 +51,7 @@ TEST_CASE("", "[Bits][operator+=(T)]") {
 }
 
 TEST_CASE("", "[ExternalBitmap][exists][before]") {
-    detail::ExternalBitmap bitmap(0b110);
+    detail::ExternalBitmap<5> bitmap(0b110);
     REQUIRE(!bitmap.exists(Bits{0, 5}));
     REQUIRE(bitmap.exists(Bits{1, 5}));
     REQUIRE(bitmap.before(Bits{0, 5}) == 0);
@@ -62,7 +62,7 @@ TEST_CASE("", "[ExternalBitmap][exists][before]") {
 }
 
 TEST_CASE("", "[InternalBitmap][set][unset][exists]") {
-    detail::InternalBitmap bitmap(0b0'1000000000001010'10000010'1001'10'1);
+    detail::InternalBitmap<5> bitmap(0b0'1000000000001010'10000010'1001'10'1);
     SECTION("4 length") {
         uint8_t idx;
         REQUIRE(!bitmap.exists(idx, Bits{14, 4}));
@@ -115,7 +115,7 @@ TEST_CASE("", "[InternalBitmap][set][unset][exists]") {
 }
 
 TEST_CASE("", "[InternalBitmap][longest_before]") {
-    detail::InternalBitmap bitmap(0b0'1000000000001010'10000010'1001'10'1);
+    detail::InternalBitmap<5> bitmap(0b0'1000000000001010'10000010'1001'10'1);
     uint8_t idx;
 
     SECTION("4") {
@@ -178,7 +178,7 @@ TEST_CASE("", "[InternalBitmap][longest_before]") {
 
 class MallocResource {
 public:
-    MallocResource(detail::NodeVec* vec)
+    MallocResource(detail::NodeVec<5>* vec)
             : vec(vec) {
     }
 
@@ -189,35 +189,35 @@ public:
     SystemAllocator alloc;
 
 private:
-    detail::NodeVec* vec;
+    detail::NodeVec<5>* vec;
 };
 
 TEST_CASE("Branch manipulation", "[NodeVec][with_new_branch]") {
-    detail::NodeVec vec{nullptr, 0, 0};
+    detail::NodeVec<5> vec{nullptr, 0, 0};
     MallocResource guard{&vec};
-    std::array<detail::ErasedNode, 3> fake;
+    std::array<detail::ErasedNode<5>, 3> fake;
     SECTION("insert the first branch") {
-        vec.insert_branch(0, detail::Node{{}, {}, &fake[0]}, guard.alloc);
+        vec.insert_branch(0, detail::Node<5>{{}, {}, &fake[0]}, guard.alloc);
         REQUIRE(vec.branches().size() == 1);
         REQUIRE(vec.branches()[0].node.children == &fake[0]);
 
         SECTION("insert a branch before") {
-            vec.insert_branch(0, detail::Node{{}, {}, &fake[1]}, guard.alloc);
+            vec.insert_branch(0, detail::Node<5>{{}, {}, &fake[1]}, guard.alloc);
             REQUIRE(vec.branches().size() == 2);
             REQUIRE(vec.branches()[0].node.children == &fake[1]);
             REQUIRE(vec.branches()[1].node.children == &fake[0]);
         }
 
         SECTION("insert a branch after") {
-            vec.insert_branch(1, detail::Node{{}, {}, &fake[1]}, guard.alloc);
+            vec.insert_branch(1, detail::Node<5>{{}, {}, &fake[1]}, guard.alloc);
             REQUIRE(vec.branches().size() == 2);
             REQUIRE(vec.branches()[0].node.children == &fake[0]);
             REQUIRE(vec.branches()[1].node.children == &fake[1]);
         }
 
         SECTION("insert a branch between") {
-            vec.insert_branch(1, detail::Node{{}, {}, &fake[1]}, guard.alloc);
-            vec.insert_branch(1, detail::Node{{}, {}, &fake[2]}, guard.alloc);
+            vec.insert_branch(1, detail::Node<5>{{}, {}, &fake[1]}, guard.alloc);
+            vec.insert_branch(1, detail::Node<5>{{}, {}, &fake[2]}, guard.alloc);
             REQUIRE(vec.branches().size() == 3);
             REQUIRE(vec.branches()[0].node.children == &fake[0]);
             REQUIRE(vec.branches()[1].node.children == &fake[2]);
@@ -227,9 +227,9 @@ TEST_CASE("Branch manipulation", "[NodeVec][with_new_branch]") {
 }
 
 TEST_CASE("Erase value", "[NodeVec][erase_value]") {
-    detail::NodeVec vec{nullptr, 0, 0};
+    detail::NodeVec<5> vec{nullptr, 0, 0};
     MallocResource guard{&vec};
-    std::array<detail::ErasedNode, 3> fake;
+    std::array<detail::ErasedNode<5>, 3> fake;
     vec.insert_value(0, &fake[0], guard.alloc);
     vec.insert_value(1, &fake[1], guard.alloc);
     vec.insert_value(2, &fake[2], guard.alloc);
@@ -254,12 +254,12 @@ TEST_CASE("Erase value", "[NodeVec][erase_value]") {
 }
 
 TEST_CASE("Erase branch", "[NodeVec][erase_branch]") {
-    detail::NodeVec vec{nullptr, 0, 0};
+    detail::NodeVec<5> vec{nullptr, 0, 0};
     MallocResource guard{&vec};
-    std::array<detail::ErasedNode, 3> fake;
-    vec.insert_branch(0, detail::Node{{}, {}, &fake[0]}, guard.alloc);
-    vec.insert_branch(1, detail::Node{{}, {}, &fake[1]}, guard.alloc);
-    vec.insert_branch(2, detail::Node{{}, {}, &fake[2]}, guard.alloc);
+    std::array<detail::ErasedNode<5>, 3> fake;
+    vec.insert_branch(0, detail::Node<5>{{}, {}, &fake[0]}, guard.alloc);
+    vec.insert_branch(1, detail::Node<5>{{}, {}, &fake[1]}, guard.alloc);
+    vec.insert_branch(2, detail::Node<5>{{}, {}, &fake[2]}, guard.alloc);
     SECTION("erase first") {
         vec.erase_branch(0, guard.alloc);
         REQUIRE(vec.branches().size() == 2);
@@ -484,8 +484,8 @@ TEST_CASE("Erase values", "[ByeTrie][erase_exact]") {
 
 TEST_CASE("", "[RecyclingStack]") {
     SECTION("useless") {
-        std::array<detail::ErasedNode, 1> storage;
-        detail::RecyclingStack stack;
+        std::array<detail::ErasedNode<5>, 1> storage;
+        detail::RecyclingStack<5> stack;
         stack.recycle(std::span(storage));
         int i = 0;
         stack.for_each_useless([&storage, &i](auto blk) {
@@ -495,8 +495,8 @@ TEST_CASE("", "[RecyclingStack]") {
         REQUIRE(i == 1);
     }
     SECTION("free") {
-        std::array<detail::ErasedNode, 2> storage;
-        detail::RecyclingStack stack;
+        std::array<detail::ErasedNode<5>, 2> storage;
+        detail::RecyclingStack<5> stack;
         stack.recycle(std::span(storage));
         int i = 0;
         stack.for_each_free([&storage, &i](auto blk) {
@@ -506,9 +506,9 @@ TEST_CASE("", "[RecyclingStack]") {
         REQUIRE(i == 1);
     }
     SECTION("push then pop on resident memory") {
-        detail::RecyclingStack stack;
+        detail::RecyclingStack<5> stack;
         for (auto i = 0u; i < 32; ++i) {
-            stack.push(detail::Node{detail::InternalBitmap{i}, {}, nullptr});
+            stack.push(detail::Node<5>{detail::InternalBitmap<5>{i}, {}, nullptr});
         }
         for (auto i = 32u; i != 0; --i) {
             REQUIRE(stack.pop().internal_bitmap.get_inner() == i - 1);
@@ -516,11 +516,11 @@ TEST_CASE("", "[RecyclingStack]") {
         REQUIRE(stack.empty());
     }
     SECTION("push then pop on resident memory") {
-        detail::RecyclingStack stack;
-        std::array<detail::ErasedNode, 2> storage;
+        detail::RecyclingStack<5> stack;
+        std::array<detail::ErasedNode<5>, 2> storage;
         stack.recycle(std::span(storage));
         for (auto i = 0u; i < 33; ++i) {
-            stack.push(detail::Node{detail::InternalBitmap{i}, {}, nullptr});
+            stack.push(detail::Node<5>{detail::InternalBitmap<5>{i}, {}, nullptr});
         }
         for (auto i = 33u; i != 0; --i) {
             REQUIRE(stack.pop().internal_bitmap.get_inner() == i - 1);
@@ -691,7 +691,7 @@ TEST_CASE(
 }
 
 TEST_CASE("Initial array optimization", "[ByeTrie][Iar]") {
-    using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, Iar16>;
+    using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, 5, Iar16<5>>;
 
     ByeTrie trie;
     trie.insert(Bits{0u, 16}, 1);
