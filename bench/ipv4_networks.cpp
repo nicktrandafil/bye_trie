@@ -76,7 +76,7 @@ std::chrono::nanoseconds per_network(std::chrono::nanoseconds dur, size_t n) {
 } // namespace
 
 int main() {
-    ByeTrieV4<long> trie;
+    ByeTrieV4<long, SystemAllocator, 6> trie;
 
     {
         std::vector<std::pair<network_v4, uint16_t>> networks;
