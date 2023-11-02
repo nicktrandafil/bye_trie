@@ -51,134 +51,176 @@ TEST_CASE("", "[Bits][operator+=(T)]") {
 }
 
 TEST_CASE("", "[ExternalBitmap][exists][before]") {
-    detail::ExternalBitmap<5> bitmap(0b110);
-    REQUIRE(!bitmap.exists(Bits{0, 5}));
-    REQUIRE(bitmap.exists(Bits{1, 5}));
-    REQUIRE(bitmap.before(Bits{0, 5}) == 0);
-    REQUIRE(bitmap.before(Bits{1, 5}) == 0);
-    REQUIRE(bitmap.before(Bits{2, 5}) == 1);
-    REQUIRE(bitmap.before(Bits{3, 5}) == 2);
-    REQUIRE(bitmap.before(Bits{4, 5}) == 2);
+    SECTION("6") {
+        detail::ExternalBitmap<6> bitmap(0b110);
+        REQUIRE(!bitmap.exists(Bits{0, 6}));
+        REQUIRE(bitmap.exists(Bits{1, 6}));
+        REQUIRE(bitmap.before(Bits{0, 6}) == 0);
+        REQUIRE(bitmap.before(Bits{2, 6}) == 1);
+    }
+
+    SECTION("5") {
+        detail::ExternalBitmap<5> bitmap(0b110);
+        REQUIRE(!bitmap.exists(Bits{0, 5}));
+        REQUIRE(bitmap.exists(Bits{1, 5}));
+        REQUIRE(bitmap.before(Bits{0, 5}) == 0);
+        REQUIRE(bitmap.before(Bits{1, 5}) == 0);
+        REQUIRE(bitmap.before(Bits{2, 5}) == 1);
+        REQUIRE(bitmap.before(Bits{3, 5}) == 2);
+        REQUIRE(bitmap.before(Bits{4, 5}) == 2);
+    }
 }
 
 TEST_CASE("", "[InternalBitmap][set][unset][exists]") {
-    detail::InternalBitmap<5> bitmap(0b0'1000000000001010'10000010'1001'10'1);
-    SECTION("4 length") {
-        uint8_t idx;
-        REQUIRE(!bitmap.exists(idx, Bits{14, 4}));
-        bitmap.set(Bits{14, 4});
-        REQUIRE(bitmap.exists(idx, Bits{14, 4}));
-        REQUIRE(idx == 8);
-        bitmap.unset(Bits{14, 4});
-        REQUIRE(!bitmap.exists(idx, Bits{14, 4}));
+    uint8_t idx;
+
+    SECTION("6") {
+        detail::InternalBitmap<6> bitmap(
+                0b00000000000000000000000000000001'0000000000000000'00000000'0000'00'0);
+        SECTION("4 length") {
+            REQUIRE(!bitmap.exists(idx, Bits{14, 5}));
+            bitmap.set(Bits{14, 5});
+            REQUIRE(bitmap.exists(idx, Bits{14, 5}));
+            REQUIRE(idx == 1);
+            bitmap.unset(Bits{14, 5});
+            REQUIRE(!bitmap.exists(idx, Bits{14, 5}));
+        }
     }
 
-    SECTION("3 length") {
-        uint8_t idx;
-        REQUIRE(!bitmap.exists(idx, Bits{6, 3}));
-        bitmap.set(Bits{6, 3});
-        REQUIRE(bitmap.exists(idx, Bits{6, 3}));
-        REQUIRE(idx == 5);
-        bitmap.unset(Bits{6, 3});
-        REQUIRE(!bitmap.exists(idx, Bits{6, 3}));
-    }
+    SECTION("5") {
+        detail::InternalBitmap<5> bitmap(0b0'1000000000001010'10000010'1001'10'1);
+        SECTION("4 length") {
+            REQUIRE(!bitmap.exists(idx, Bits{14, 4}));
+            bitmap.set(Bits{14, 4});
+            REQUIRE(bitmap.exists(idx, Bits{14, 4}));
+            REQUIRE(idx == 8);
+            bitmap.unset(Bits{14, 4});
+            REQUIRE(!bitmap.exists(idx, Bits{14, 4}));
+        }
 
-    SECTION("2 length") {
-        uint8_t idx;
-        REQUIRE(!bitmap.exists(idx, Bits{2, 2}));
-        bitmap.set(Bits{2, 2});
-        REQUIRE(bitmap.exists(idx, Bits{2, 2}));
-        REQUIRE(idx == 3);
-        bitmap.unset(Bits{2, 2});
-        REQUIRE(!bitmap.exists(idx, Bits{2, 2}));
-    }
+        SECTION("3 length") {
+            REQUIRE(!bitmap.exists(idx, Bits{6, 3}));
+            bitmap.set(Bits{6, 3});
+            REQUIRE(bitmap.exists(idx, Bits{6, 3}));
+            REQUIRE(idx == 5);
+            bitmap.unset(Bits{6, 3});
+            REQUIRE(!bitmap.exists(idx, Bits{6, 3}));
+        }
 
-    SECTION("1 length") {
-        uint8_t idx;
-        REQUIRE(!bitmap.exists(idx, Bits{0, 1}));
-        bitmap.set(Bits{0, 1});
-        REQUIRE(bitmap.exists(idx, Bits{0, 1}));
-        REQUIRE(idx == 1);
-        bitmap.unset(Bits{0, 1});
-        REQUIRE(!bitmap.exists(idx, Bits{0, 1}));
-    }
+        SECTION("2 length") {
+            REQUIRE(!bitmap.exists(idx, Bits{2, 2}));
+            bitmap.set(Bits{2, 2});
+            REQUIRE(bitmap.exists(idx, Bits{2, 2}));
+            REQUIRE(idx == 3);
+            bitmap.unset(Bits{2, 2});
+            REQUIRE(!bitmap.exists(idx, Bits{2, 2}));
+        }
 
-    SECTION("0 length") {
-        uint8_t idx;
-        REQUIRE(bitmap.exists(idx, Bits{0, 0}));
-        bitmap.unset(Bits{0, 0});
-        REQUIRE(!bitmap.exists(idx, Bits{0, 0}));
-        bitmap.set(Bits{0, 0});
-        REQUIRE(bitmap.exists(idx, Bits{0, 0}));
-        REQUIRE(idx == 0);
+        SECTION("1 length") {
+            REQUIRE(!bitmap.exists(idx, Bits{0, 1}));
+            bitmap.set(Bits{0, 1});
+            REQUIRE(bitmap.exists(idx, Bits{0, 1}));
+            REQUIRE(idx == 1);
+            bitmap.unset(Bits{0, 1});
+            REQUIRE(!bitmap.exists(idx, Bits{0, 1}));
+        }
+
+        SECTION("0 length") {
+            REQUIRE(bitmap.exists(idx, Bits{0, 0}));
+            bitmap.unset(Bits{0, 0});
+            REQUIRE(!bitmap.exists(idx, Bits{0, 0}));
+            bitmap.set(Bits{0, 0});
+            REQUIRE(bitmap.exists(idx, Bits{0, 0}));
+            REQUIRE(idx == 0);
+        }
     }
 }
 
 TEST_CASE("", "[InternalBitmap][longest_before]") {
-    detail::InternalBitmap<5> bitmap(0b0'1000000000001010'10000010'1001'10'1);
     uint8_t idx;
 
-    SECTION("4") {
-        SECTION("match") {
-            REQUIRE(bitmap.find_longest(idx, Bits{0b1111u, 4}).value() == 4);
-            REQUIRE(idx == 8);
-            REQUIRE(bitmap.find_longest(idx, Bits{0b11, 4}).value() == 4);
-            REQUIRE(idx == 7);
-        }
-        SECTION("longest") {
-            REQUIRE(bitmap.find_longest(idx, Bits{0b0111, 4}).value() == 3);
-            REQUIRE(idx == 5);
-        }
-    }
-
-    SECTION("3") {
-        SECTION("match") {
-            REQUIRE(bitmap.find_longest(idx, Bits{0b111, 3}).value() == 3);
-            REQUIRE(idx == 5);
-        }
-        SECTION("longest") {
-            REQUIRE(bitmap.find_longest(idx, Bits{0b011, 3}).value() == 2);
-            REQUIRE(idx == 3);
+    SECTION("6") {
+        detail::InternalBitmap<6> bitmap(
+                0b10000000000000000000000000000010'0000000000001000'00000000'0000'00'0);
+        SECTION("5") {
+            SECTION("match") {
+                REQUIRE(bitmap.find_longest(idx, Bits{0b11111u, 5}).value() == 5);
+                REQUIRE(idx == 2);
+                REQUIRE(bitmap.find_longest(idx, Bits{0b1, 5}).value() == 5);
+                REQUIRE(idx == 1);
+            }
+            SECTION("longest") {
+                REQUIRE(bitmap.find_longest(idx, Bits{0b011, 5}).value() == 4);
+                REQUIRE(idx == 0);
+            }
         }
     }
 
-    SECTION("2") {
-        SECTION("match") {
-            REQUIRE(bitmap.find_longest(idx, Bits{0b11, 2}).value() == 2);
-            REQUIRE(idx == 3);
+    SECTION("5") {
+        detail::InternalBitmap<5> bitmap(0b0'1000000000001010'10000010'1001'10'1);
+        SECTION("4") {
+            SECTION("match") {
+                REQUIRE(bitmap.find_longest(idx, Bits{0b1111u, 4}).value() == 4);
+                REQUIRE(idx == 8);
+                REQUIRE(bitmap.find_longest(idx, Bits{0b11, 4}).value() == 4);
+                REQUIRE(idx == 7);
+            }
+            SECTION("longest") {
+                REQUIRE(bitmap.find_longest(idx, Bits{0b0111, 4}).value() == 3);
+                REQUIRE(idx == 5);
+            }
         }
-        SECTION("longest") {
-            REQUIRE(bitmap.find_longest(idx, Bits{0b01, 2}).value() == 1);
-            REQUIRE(idx == 1);
-        }
-    }
 
-    SECTION("1") {
-        SECTION("match") {
-            REQUIRE(bitmap.find_longest(idx, Bits{0b1, 1}).value() == 1);
-            REQUIRE(idx == 1);
+        SECTION("3") {
+            SECTION("match") {
+                REQUIRE(bitmap.find_longest(idx, Bits{0b111, 3}).value() == 3);
+                REQUIRE(idx == 5);
+            }
+            SECTION("longest") {
+                REQUIRE(bitmap.find_longest(idx, Bits{0b011, 3}).value() == 2);
+                REQUIRE(idx == 3);
+            }
         }
-        SECTION("longest") {
-            REQUIRE(bitmap.find_longest(idx, Bits{0b0, 1}).value() == 0);
-            REQUIRE(idx == 0);
-        }
-    }
 
-    SECTION("0") {
-        SECTION("match") {
-            REQUIRE(bitmap.find_longest(idx, Bits{0b0, 0}).value() == 0);
-            REQUIRE(idx == 0);
+        SECTION("2") {
+            SECTION("match") {
+                REQUIRE(bitmap.find_longest(idx, Bits{0b11, 2}).value() == 2);
+                REQUIRE(idx == 3);
+            }
+            SECTION("longest") {
+                REQUIRE(bitmap.find_longest(idx, Bits{0b01, 2}).value() == 1);
+                REQUIRE(idx == 1);
+            }
         }
-        SECTION("longest") {
-            REQUIRE(bitmap.find_longest(idx, Bits{0b1, 0}).value() == 0);
-            REQUIRE(idx == 0);
+
+        SECTION("1") {
+            SECTION("match") {
+                REQUIRE(bitmap.find_longest(idx, Bits{0b1, 1}).value() == 1);
+                REQUIRE(idx == 1);
+            }
+            SECTION("longest") {
+                REQUIRE(bitmap.find_longest(idx, Bits{0b0, 1}).value() == 0);
+                REQUIRE(idx == 0);
+            }
+        }
+
+        SECTION("0") {
+            SECTION("match") {
+                REQUIRE(bitmap.find_longest(idx, Bits{0b0, 0}).value() == 0);
+                REQUIRE(idx == 0);
+            }
+            SECTION("longest") {
+                REQUIRE(bitmap.find_longest(idx, Bits{0b1, 0}).value() == 0);
+                REQUIRE(idx == 0);
+            }
         }
     }
 }
 
+template <uint8_t N>
 class MallocResource {
 public:
-    MallocResource(detail::NodeVec<5>* vec)
+    MallocResource(detail::NodeVec<N>* vec)
             : vec(vec) {
     }
 
@@ -189,35 +231,39 @@ public:
     SystemAllocator alloc;
 
 private:
-    detail::NodeVec<5>* vec;
+    detail::NodeVec<N>* vec;
 };
 
-TEST_CASE("Branch manipulation", "[NodeVec][with_new_branch]") {
-    detail::NodeVec<5> vec{nullptr, 0, 0};
+using Ns = std::tuple<std::integral_constant<uint8_t, 5>,
+                      std::integral_constant<uint8_t, 6>>;
+
+TEMPLATE_LIST_TEST_CASE("Branch manipulation", "[NodeVec][with_new_branch]", Ns) {
+    constexpr auto N = TestType{};
+    detail::NodeVec<N> vec{nullptr, 0, 0};
     MallocResource guard{&vec};
-    std::array<detail::ErasedNode<5>, 3> fake;
+    std::array<detail::ErasedNode<N>, 3> fake;
     SECTION("insert the first branch") {
-        vec.insert_branch(0, detail::Node<5>{{}, {}, &fake[0]}, guard.alloc);
+        vec.insert_branch(0, detail::Node<N>{{}, {}, &fake[0]}, guard.alloc);
         REQUIRE(vec.branches().size() == 1);
         REQUIRE(vec.branches()[0].node.children == &fake[0]);
 
         SECTION("insert a branch before") {
-            vec.insert_branch(0, detail::Node<5>{{}, {}, &fake[1]}, guard.alloc);
+            vec.insert_branch(0, detail::Node<N>{{}, {}, &fake[1]}, guard.alloc);
             REQUIRE(vec.branches().size() == 2);
             REQUIRE(vec.branches()[0].node.children == &fake[1]);
             REQUIRE(vec.branches()[1].node.children == &fake[0]);
         }
 
         SECTION("insert a branch after") {
-            vec.insert_branch(1, detail::Node<5>{{}, {}, &fake[1]}, guard.alloc);
+            vec.insert_branch(1, detail::Node<N>{{}, {}, &fake[1]}, guard.alloc);
             REQUIRE(vec.branches().size() == 2);
             REQUIRE(vec.branches()[0].node.children == &fake[0]);
             REQUIRE(vec.branches()[1].node.children == &fake[1]);
         }
 
         SECTION("insert a branch between") {
-            vec.insert_branch(1, detail::Node<5>{{}, {}, &fake[1]}, guard.alloc);
-            vec.insert_branch(1, detail::Node<5>{{}, {}, &fake[2]}, guard.alloc);
+            vec.insert_branch(1, detail::Node<N>{{}, {}, &fake[1]}, guard.alloc);
+            vec.insert_branch(1, detail::Node<N>{{}, {}, &fake[2]}, guard.alloc);
             REQUIRE(vec.branches().size() == 3);
             REQUIRE(vec.branches()[0].node.children == &fake[0]);
             REQUIRE(vec.branches()[1].node.children == &fake[2]);
@@ -226,10 +272,11 @@ TEST_CASE("Branch manipulation", "[NodeVec][with_new_branch]") {
     }
 }
 
-TEST_CASE("Erase value", "[NodeVec][erase_value]") {
-    detail::NodeVec<5> vec{nullptr, 0, 0};
+TEMPLATE_LIST_TEST_CASE("Erase value", "[NodeVec][erase_value]", Ns) {
+    constexpr auto N = TestType{};
+    detail::NodeVec<N> vec{nullptr, 0, 0};
     MallocResource guard{&vec};
-    std::array<detail::ErasedNode<5>, 3> fake;
+    std::array<detail::ErasedNode<N>, 3> fake;
     vec.insert_value(0, &fake[0], guard.alloc);
     vec.insert_value(1, &fake[1], guard.alloc);
     vec.insert_value(2, &fake[2], guard.alloc);
@@ -253,13 +300,14 @@ TEST_CASE("Erase value", "[NodeVec][erase_value]") {
     }
 }
 
-TEST_CASE("Erase branch", "[NodeVec][erase_branch]") {
-    detail::NodeVec<5> vec{nullptr, 0, 0};
+TEMPLATE_LIST_TEST_CASE("Erase branch", "[NodeVec][erase_branch]", Ns) {
+    constexpr auto N = TestType{};
+    detail::NodeVec<N> vec{nullptr, 0, 0};
     MallocResource guard{&vec};
-    std::array<detail::ErasedNode<5>, 3> fake;
-    vec.insert_branch(0, detail::Node<5>{{}, {}, &fake[0]}, guard.alloc);
-    vec.insert_branch(1, detail::Node<5>{{}, {}, &fake[1]}, guard.alloc);
-    vec.insert_branch(2, detail::Node<5>{{}, {}, &fake[2]}, guard.alloc);
+    std::array<detail::ErasedNode<N>, 3> fake;
+    vec.insert_branch(0, detail::Node<N>{{}, {}, &fake[0]}, guard.alloc);
+    vec.insert_branch(1, detail::Node<N>{{}, {}, &fake[1]}, guard.alloc);
+    vec.insert_branch(2, detail::Node<N>{{}, {}, &fake[2]}, guard.alloc);
     SECTION("erase first") {
         vec.erase_branch(0, guard.alloc);
         REQUIRE(vec.branches().size() == 2);
@@ -280,8 +328,8 @@ TEST_CASE("Erase branch", "[NodeVec][erase_branch]") {
     }
 }
 
-TEST_CASE("Insert values", "[ByeTrie][insert]") {
-    bye_trie::ByeTrie<uint32_t, long> trie;
+TEMPLATE_LIST_TEST_CASE("Insert values", "[ByeTrie][insert]", Ns) {
+    bye_trie::ByeTrie<uint32_t, long, SystemAllocator, TestType{}> trie;
 
     SECTION("No branching") {
         SECTION("insert the first value") {
@@ -353,15 +401,15 @@ TEST_CASE("Insert values", "[ByeTrie][insert]") {
     }
 }
 
-TEST_CASE("", "[ByeTrie][replace]") {
-    bye_trie::ByeTrie<uint32_t, long> trie;
+TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][replace]", Ns) {
+    bye_trie::ByeTrie<uint32_t, long, SystemAllocator, TestType{}> trie;
     REQUIRE(trie.replace(Bits{0b0'00001u, 6}, 1) == std::nullopt);
     REQUIRE(trie.replace(Bits{0b0'00001u, 6}, 2) == 1);
     REQUIRE(trie.replace(Bits{0b0'00001u, 6}, 3) == 2);
 }
 
-TEST_CASE("Match exact prefixes", "[ByeTrie][match_exact]") {
-    bye_trie::ByeTrie<uint32_t, long> trie;
+TEMPLATE_LIST_TEST_CASE("Match exact prefixes", "[ByeTrie][match_exact]", Ns) {
+    bye_trie::ByeTrie<uint32_t, long, SystemAllocator, TestType{}> trie;
 
     SECTION("positive") {
         trie.insert(Bits{0u, 4}, 0);
@@ -392,8 +440,8 @@ TEST_CASE("Match exact prefixes", "[ByeTrie][match_exact]") {
     }
 }
 
-TEST_CASE("Match longest prefixes", "[ByeTrie][match_longest]", ) {
-    bye_trie::ByeTrie<uint32_t, long> trie;
+TEMPLATE_LIST_TEST_CASE("Match longest prefixes", "[ByeTrie][match_longest]", Ns) {
+    bye_trie::ByeTrie<uint32_t, long, SystemAllocator, TestType{}> trie;
     trie.insert(Bits{0b0000u, 4}, 0);
     trie.insert(Bits{0b001u, 3}, 1);
     trie.insert(Bits{0b0000'00001u, 6}, 2);
@@ -430,14 +478,15 @@ TEST_CASE("Match longest prefixes", "[ByeTrie][match_longest]", ) {
     }
 }
 
-TEST_CASE("Erase values", "[ByeTrie][erase_exact]") {
+TEMPLATE_LIST_TEST_CASE("Erase values", "[ByeTrie][erase_exact]", Ns) {
+    constexpr auto N = TestType{};
     SECTION("Not found") {
-        bye_trie::ByeTrie<uint32_t, long> trie;
+        bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         REQUIRE(!trie.erase_exact(Bits{0u, 5}));
         REQUIRE(!trie.erase_exact(Bits{0u, 4}));
     }
     SECTION("No unfold-cleaning") {
-        bye_trie::ByeTrie<uint32_t, long> trie;
+        bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{0b0'00000'00000u, 11}, 0);
         trie.insert(Bits{0b1'00000'00000u, 11}, 1);
         REQUIRE(trie.erase_exact(Bits{0b0'00000'00000u, 11}));
@@ -445,7 +494,7 @@ TEST_CASE("Erase values", "[ByeTrie][erase_exact]") {
         REQUIRE(*trie.match_exact(Bits{0b1'00000'00000u, 11}) == 1);
     }
     SECTION("Unfold-cleaning just the leaf which contains the value") {
-        bye_trie::ByeTrie<uint32_t, long> trie;
+        bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{0b0'00000'00000u, 11}, 0);
         trie.insert(Bits{0b0'00000u, 6}, 1);
         REQUIRE(trie.erase_exact(Bits{0b0'00000'00000u, 11}));
@@ -453,7 +502,7 @@ TEST_CASE("Erase values", "[ByeTrie][erase_exact]") {
         REQUIRE(*trie.match_exact(Bits{0b0'00000u, 6}) == 1);
     }
     SECTION("bug case of confusion of external bitmap index in unfold-cleaning") {
-        bye_trie::ByeTrie<uint32_t, long> trie;
+        bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{0b0'00001'00000u, 11}, 0);
         trie.insert(Bits{0b0'00000u, 6}, 1);
         REQUIRE(trie.erase_exact(Bits{0b0'00001'00000u, 11}));
@@ -461,19 +510,19 @@ TEST_CASE("Erase values", "[ByeTrie][erase_exact]") {
         REQUIRE(*trie.match_exact(Bits{0b0'00000u, 6}) == 1);
     }
     SECTION("Unfold-cleaning the branch up to the root") {
-        bye_trie::ByeTrie<uint32_t, long> trie;
+        bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{0b0'00000'00000u, 11}, 0);
         REQUIRE(trie.erase_exact(Bits{0b0'00000'00000u, 11}));
         REQUIRE(trie.size() == 0);
     }
     SECTION("Unfold-cleaning the branch in case there is just root node") {
-        bye_trie::ByeTrie<uint32_t, long> trie;
+        bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{0b0001u, 4}, 0);
         REQUIRE(trie.erase_exact(Bits{0b0001u, 4}));
         REQUIRE(trie.size() == 0);
     }
     SECTION("node vec index is not equal to stride_m_1") {
-        bye_trie::ByeTrie<uint32_t, long> trie;
+        bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{1u, 2}, 0);
         trie.insert(Bits{2u, 2}, 1);
         trie.erase_exact(Bits{2u, 2});
@@ -482,53 +531,55 @@ TEST_CASE("Erase values", "[ByeTrie][erase_exact]") {
     }
 }
 
-TEST_CASE("", "[RecyclingStack]") {
+TEMPLATE_LIST_TEST_CASE("", "[RecyclingStack]", Ns) {
+    constexpr auto N = TestType{};
+
     SECTION("useless") {
-        std::array<detail::ErasedNode<5>, 1> storage;
-        detail::RecyclingStack<5> stack;
+        std::array<detail::ErasedNode<TestType{}>, 1> storage;
+        detail::RecyclingStack<N> stack;
         stack.recycle(std::span(storage));
         int i = 0;
-        stack.for_each_useless([&storage, &i](auto blk) {
-            REQUIRE(blk == MemBlk{storage.data(), 16});
+        stack.for_each_useless([&storage, &i, N](auto blk) {
+            REQUIRE(blk == MemBlk{storage.data(), sizeof(detail::Node<N>)});
             i += 1;
         });
         REQUIRE(i == 1);
     }
     SECTION("free") {
-        std::array<detail::ErasedNode<5>, 2> storage;
-        detail::RecyclingStack<5> stack;
+        std::array<detail::ErasedNode<N>, 2> storage;
+        detail::RecyclingStack<N> stack;
         stack.recycle(std::span(storage));
         int i = 0;
-        stack.for_each_free([&storage, &i](auto blk) {
-            REQUIRE(blk == MemBlk{storage.data(), 32});
+        stack.for_each_free([&storage, &i, N](auto blk) {
+            REQUIRE(blk == MemBlk{storage.data(), sizeof(detail::Node<N>) * 2});
             i += 1;
         });
         REQUIRE(i == 1);
     }
     SECTION("push then pop on resident memory") {
-        detail::RecyclingStack<5> stack;
-        for (auto i = 0u; i < 32; ++i) {
-            stack.push(detail::Node<5>{detail::InternalBitmap<5>{i}, {}, nullptr});
+        detail::RecyclingStack<N> stack;
+        for (auto i = 0u; i < detail::Stride<N>::index_count; ++i) {
+            stack.push(detail::Node<N>{detail::InternalBitmap<N>{i}, {}, nullptr});
         }
-        for (auto i = 32u; i != 0; --i) {
+        for (auto i = detail::Stride<N>::index_count; i != 0; --i) {
             REQUIRE(stack.pop().internal_bitmap.get_inner() == i - 1);
         }
         REQUIRE(stack.empty());
     }
     SECTION("push then pop on resident memory") {
-        detail::RecyclingStack<5> stack;
-        std::array<detail::ErasedNode<5>, 2> storage;
+        detail::RecyclingStack<N> stack;
+        std::array<detail::ErasedNode<N>, 2> storage;
         stack.recycle(std::span(storage));
-        for (auto i = 0u; i < 33; ++i) {
-            stack.push(detail::Node<5>{detail::InternalBitmap<5>{i}, {}, nullptr});
+        for (auto i = 0u; i < detail::Stride<N>::index_count + 1; ++i) {
+            stack.push(detail::Node<N>{detail::InternalBitmap<N>{i}, {}, nullptr});
         }
-        for (auto i = 33u; i != 0; --i) {
+        for (auto i = detail::Stride<N>::index_count + 1; i != 0; --i) {
             REQUIRE(stack.pop().internal_bitmap.get_inner() == i - 1);
         }
         REQUIRE(stack.empty());
         int i = 0;
-        stack.for_each_free([&storage, &i](auto blk) {
-            REQUIRE(blk == MemBlk{storage.data(), 32});
+        stack.for_each_free([&storage, &i, N](auto blk) {
+            REQUIRE(blk == MemBlk{storage.data(), sizeof(detail::Node<N>) * 2});
             i += 1;
         });
         REQUIRE(i == 1);
@@ -703,4 +754,16 @@ TEST_CASE("Initial array optimization", "[ByeTrie][Iar]") {
     trie.insert(Bits{0u, 24}, 3);
     REQUIRE(trie.match_exact(Bits{0u, 24}) == 3);
     REQUIRE(trie.match_exact(Bits{1u, 24}) == std::nullopt);
+}
+
+TEST_CASE("Call every function of the interface N = 6 just to ensure compilation",
+          "[ByeTrie]") {
+    using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, 6>;
+
+    ByeTrie trie;
+    trie.insert(Bits<uint32_t>{0u, 0}, 1);
+    trie.replace(Bits<uint32_t>{0u, 0}, 1);
+    trie.match_exact(Bits<uint32_t>{0u, 0});
+    trie.match_longest(Bits<uint32_t>{0u, 0});
+    trie.subs(Bits<uint32_t>{0u, 0});
 }
