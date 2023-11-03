@@ -235,7 +235,8 @@ private:
 };
 
 using Ns = std::tuple<std::integral_constant<uint8_t, 5>,
-                      std::integral_constant<uint8_t, 6>>;
+                      std::integral_constant<uint8_t, 6>,
+                      std::integral_constant<uint8_t, 7>>;
 
 TEMPLATE_LIST_TEST_CASE("Branch manipulation", "[NodeVec][with_new_branch]", Ns) {
     constexpr auto N = TestType{};

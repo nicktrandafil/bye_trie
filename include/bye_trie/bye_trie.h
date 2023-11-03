@@ -24,6 +24,8 @@
 
 #pragma once
 
+#include "uint128.h"
+
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -184,9 +186,22 @@ private:
     Bits<uint8_t> inner;
 };
 
+template <class T>
+uint8_t popcount(T x) {
+    return static_cast<uint8_t>(std::popcount(x));
+}
+
+inline uint8_t popcount(Uint128 x) {
+    return static_cast<uint8_t>(
+            std::popcount(static_cast<uint64_t>(x & 0xffffffffffffffffull))
+            + std::popcount(static_cast<uint64_t>(x >> 64)));
+}
+
 template <uint8_t N>
-using BitmapIndexType =
-        std::conditional_t<N == 5, uint32_t, std::conditional_t<N == 6, uint64_t, void>>;
+using BitmapIndexType = std::conditional_t<
+        N == 5,
+        uint32_t,
+        std::conditional_t<N == 6, uint64_t, std::conditional_t<N == 7, Uint128, void>>>;
 
 // 0|0000000000000000|00000000|0000|00|0
 //                 16        8    4  2 1
@@ -215,33 +230,39 @@ public:
     std::optional<uint8_t> find_longest(uint8_t& values_before,
                                         Stride<N - 1> bits) const noexcept {
         switch (bits.len()) {
+        case 6:
+            if (auto const idx = (u1 << (63 + (bits.bits() & 0b111111))); inner & idx) {
+                values_before = popcount(inner & (idx - 1));
+                return 6;
+            }
+            [[fallthrough]];
         case 5:
             if (auto const idx = (u1 << (31 + (bits.bits() & 0b11111))); inner & idx) {
-                values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
+                values_before = popcount(inner & (idx - 1));
                 return 5;
             }
             [[fallthrough]];
         case 4:
             if (auto const idx = (1u << (15 + (bits.bits() & 0b1111))); inner & idx) {
-                values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
+                values_before = popcount(inner & (idx - 1));
                 return 4;
             }
             [[fallthrough]];
         case 3:
             if (auto const idx = (1u << (7 + (bits.bits() & 0b111))); inner & idx) {
-                values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
+                values_before = popcount(inner & (idx - 1));
                 return 3;
             }
             [[fallthrough]];
         case 2:
             if (auto const idx = (1u << (3 + (bits.bits() & 0b11))); inner & idx) {
-                values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
+                values_before = popcount(inner & (idx - 1));
                 return 2;
             }
             [[fallthrough]];
         case 1:
             if (auto const idx = (1u << (1 + (bits.bits() & 0b1))); inner & idx) {
-                values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
+                values_before = popcount(inner & (idx - 1));
                 return 1;
             }
             [[fallthrough]];
@@ -256,29 +277,34 @@ public:
 
     bool exists(uint8_t& values_before, Stride<N - 1> bits) const noexcept {
         switch (bits.len()) {
+        case 6: {
+            auto const idx = (u1 << (63 + bits.value()));
+            values_before = popcount(inner & (idx - 1));
+            return inner & idx;
+        }
         case 5: {
             auto const idx = (u1 << (31 + bits.value()));
-            values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
+            values_before = popcount(inner & (idx - 1));
             return inner & idx;
         }
         case 4: {
             auto const idx = (1u << (15 + bits.value()));
-            values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
+            values_before = popcount(inner & (idx - 1));
             return inner & idx;
         }
         case 3: {
             auto const idx = (1u << (7 + bits.value()));
-            values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
+            values_before = popcount(inner & (idx - 1));
             return inner & idx;
         }
         case 2: {
             auto const idx = (1u << (3 + bits.value()));
-            values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
+            values_before = popcount(inner & (idx - 1));
             return inner & idx;
         }
         case 1: {
             auto const idx = (1u << (1 + bits.value()));
-            values_before = static_cast<uint8_t>(std::popcount(inner & (idx - 1)));
+            values_before = popcount(inner & (idx - 1));
             return inner & idx;
         }
         case 0:
@@ -290,11 +316,14 @@ public:
     }
 
     uint8_t total() const noexcept {
-        return static_cast<uint8_t>(std::popcount(inner));
+        return popcount(inner);
     }
 
     void set(Stride<N - 1> bits) {
         switch (bits.len()) {
+        case 6:
+            inner |= (u1 << (63 + bits.value()));
+            break;
         case 5:
             inner |= (u1 << (31 + bits.value()));
             break;
@@ -318,6 +347,9 @@ public:
 
     void unset(Stride<N - 1> bits) {
         switch (bits.len()) {
+        case 6:
+            inner &= ~(u1 << (63 + bits.value()));
+            break;
         case 5:
             inner &= ~(u1 << (31 + bits.value()));
             break;
@@ -365,11 +397,11 @@ public:
     }
 
     uint8_t before(Stride<N> x) const noexcept {
-        return static_cast<uint8_t>(std::popcount(((u1 << x.value()) - 1) & inner));
+        return popcount(((u1 << x.value()) - 1) & inner);
     }
 
     uint8_t total() const noexcept {
-        return static_cast<uint8_t>(std::popcount(inner));
+        return popcount(inner);
     }
 
     void set(Stride<N> x) {
@@ -424,12 +456,12 @@ public:
     }
 
     T& operator[](size_t i) noexcept {
-        assert(i <= size_); // `=` thanks to sentinel-1
+        assert(i < Capacity); // thanks to sentinel-1
         return storage_[i];
     }
 
     T operator[](size_t i) const noexcept {
-        assert(i <= size_); // `=` thanks to sentinel-1
+        assert(i <= Capacity); // thanks to sentinel-1
         return storage_[i];
     }
 
@@ -559,18 +591,18 @@ public:
     auto values() const noexcept {
         assert(values_count <= InternalBitmap<N>::index_count);
         StaticVec<void*,
-                  InternalBitmap<N>::index_count
-                          + InternalBitmap<N>::index_count
-                                    % ErasedNode<N>::pointer_count /*sentinel-1*/>
+                  (InternalBitmap<N>::index_count / ErasedNode<N>::pointer_count
+                   + (InternalBitmap<N>::index_count % ErasedNode<N>::pointer_count != 0))
+                          * ErasedNode<N>::pointer_count /*sentinel-1*/>
                 ret(values_count);
         auto const src = inner.subspan(branches_count);
         auto i = 0u;
         for (auto x : src) {
             [&]<auto... I>(std::index_sequence<I...>) {
                 // sentinel-1 makes it safe the cases I != 0 safe
-                ((ret[i * 2 + I] = x.pointers[I]), ...);
+                ((ret[i + I] = x.pointers[I]), ...);
             }(std::make_index_sequence<ErasedNode<N>::pointer_count>{});
-            i += 1;
+            i += ErasedNode<N>::pointer_count;
         }
         return ret;
     }
@@ -931,7 +963,7 @@ template <UnsignedIntegral P,
           class Iar = Iar0<N>>
 class ByeTrie {
 public:
-    static_assert(N == 5 || N == 6, "not supported");
+    static_assert(N == 5 || N == 6 || N == 7, "not supported");
 
     using StrideType = detail::Stride<N>;
 

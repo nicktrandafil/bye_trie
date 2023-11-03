@@ -45,7 +45,7 @@ static inline __attribute__((always_inline)) void do_not_optimize(T&& value) noe
 }
 
 int main() {
-    ByeTrie<uint32_t, long, SystemAllocator, 6, Iar16<6>> trie;
+    ByeTrie<uint32_t, long, SystemAllocator, 5, Iar16<5>> trie;
 
     constexpr auto w = 44;
 
