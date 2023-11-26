@@ -234,7 +234,9 @@ private:
     detail::NodeVec<N>* vec;
 };
 
-using Ns = std::tuple<std::integral_constant<uint8_t, 5>,
+using Ns = std::tuple<std::integral_constant<uint8_t, 3>,
+                      std::integral_constant<uint8_t, 4>,
+                      std::integral_constant<uint8_t, 5>,
                       std::integral_constant<uint8_t, 6>,
                       std::integral_constant<uint8_t, 7>>;
 
@@ -757,10 +759,8 @@ TEST_CASE("Initial array optimization", "[ByeTrie][Iar]") {
     REQUIRE(trie.match_exact(Bits{1u, 24}) == std::nullopt);
 }
 
-TEST_CASE("Call every function of the interface N = 6 just to ensure compilation",
-          "[ByeTrie]") {
-    using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, 6>;
-
+TEST_CASE("", "[playground]") {
+    using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, 3>;
     ByeTrie trie;
     trie.insert(Bits<uint32_t>{0u, 0}, 1);
     trie.replace(Bits<uint32_t>{0u, 0}, 1);

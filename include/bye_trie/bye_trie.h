@@ -66,7 +66,7 @@ concept UnsignedIntegral = std::unsigned_integral<T>
 template <UnsignedIntegral T>
 class Bits {
 public:
-    Bits()
+    constexpr Bits()
             : bits_{}
             , len_{} {
     }
@@ -77,15 +77,15 @@ public:
         assert(len <= sizeof(T) * CHAR_BIT);
     }
 
-    uint8_t len() const noexcept {
+    constexpr uint8_t len() const noexcept {
         return len_;
     }
 
-    T bits() const noexcept {
+    constexpr T bits() const noexcept {
         return bits_;
     }
 
-    T value() const noexcept {
+    constexpr T value() const noexcept {
         return take_slice(bits_, 0, len_);
     }
 
@@ -111,7 +111,7 @@ public:
     }
 
     /// \post UB when `len() >= sizeof(T) * CHAR_BIT`
-    Bits& operator++() noexcept {
+    constexpr Bits& operator++() noexcept {
         if (value() == static_cast<T>(((1 << len_) - 1))) {
             ++len_;
             bits_ = 0;
@@ -174,11 +174,11 @@ public:
         return inner.value();
     }
 
-    uint8_t len() const noexcept {
+    constexpr uint8_t len() const noexcept {
         return inner.len();
     }
 
-    uint8_t bits() const noexcept {
+    constexpr uint8_t bits() const noexcept {
         return inner.bits();
     }
 
@@ -199,9 +199,17 @@ inline uint8_t popcount(Uint128 x) {
 
 template <uint8_t N>
 using BitmapIndexType = std::conditional_t<
-        N == 5,
+        N == 3,
         uint32_t,
-        std::conditional_t<N == 6, uint64_t, std::conditional_t<N == 7, Uint128, void>>>;
+        std::conditional_t<
+                N == 4,
+                uint32_t,
+                std::conditional_t<
+                        N == 5,
+                        uint32_t,
+                        std::conditional_t<N == 6,
+                                           uint64_t,
+                                           std::conditional_t<N == 7, Uint128, void>>>>>;
 
 // 0|0000000000000000|00000000|0000|00|0
 //                 16        8    4  2 1
@@ -963,7 +971,7 @@ template <UnsignedIntegral P,
           class Iar = Iar0<N>>
 class ByeTrie {
 public:
-    static_assert(N == 5 || N == 6 || N == 7, "not supported");
+    static_assert(N == 3 || N == 4 || N == 5 || N == 6 || N == 7, "not supported");
 
     using StrideType = detail::Stride<N>;
 
