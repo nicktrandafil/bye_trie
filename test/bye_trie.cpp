@@ -570,10 +570,10 @@ TEMPLATE_LIST_TEST_CASE("", "[RecyclingStack]", Ns) {
     }
     SECTION("push then pop on resident memory") {
         detail::RecyclingStack<N> stack;
-        for (auto i = 0u; i < detail::Stride<N>::index_count; ++i) {
+        for (auto i = 0u; i < detail::Stride<N>::external_bitmap_index_count; ++i) {
             stack.push(detail::Node<N>{detail::InternalBitmap<N>{i}, {}, nullptr});
         }
-        for (auto i = detail::Stride<N>::index_count; i != 0; --i) {
+        for (auto i = detail::Stride<N>::external_bitmap_index_count; i != 0; --i) {
             REQUIRE(stack.pop().internal_bitmap.get_inner() == i - 1);
         }
         REQUIRE(stack.empty());
@@ -582,10 +582,10 @@ TEMPLATE_LIST_TEST_CASE("", "[RecyclingStack]", Ns) {
         detail::RecyclingStack<N> stack;
         std::array<detail::ErasedNode<N>, 2> storage;
         stack.recycle(std::span(storage));
-        for (auto i = 0u; i < detail::Stride<N>::index_count + 1; ++i) {
+        for (auto i = 0u; i < detail::Stride<N>::external_bitmap_index_count + 1; ++i) {
             stack.push(detail::Node<N>{detail::InternalBitmap<N>{i}, {}, nullptr});
         }
-        for (auto i = detail::Stride<N>::index_count + 1; i != 0; --i) {
+        for (auto i = detail::Stride<N>::external_bitmap_index_count + 1; i != 0; --i) {
             REQUIRE(stack.pop().internal_bitmap.get_inner() == i - 1);
         }
         REQUIRE(stack.empty());

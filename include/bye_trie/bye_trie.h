@@ -165,19 +165,36 @@ private:
 
 namespace detail {
 
+constexpr void debug_assert(bool expr) {
+    if (std::is_constant_evaluated()) {
+        if (!expr) {
+            throw 0;
+        }
+    } else {
+        assert(expr);
+    }
+}
+
 template <uint8_t N>
 class Stride {
 public:
     static constexpr size_t bits_count = N;
-    static constexpr size_t index_count = 1 << bits_count;
+    static constexpr size_t external_bitmap_index_count = 1 << bits_count;
+    constexpr static size_t internal_bitmap_index_count = [] {
+        uint8_t ret = 0;
+        for (uint8_t i = 0; i <= Stride<N - 1>::bits_count; ++i) {
+            ret += 1 << i;
+        }
+        return ret;
+    }();
 
     template <class T>
-    /*implicit*/ Stride(Bits<T> bits) noexcept {
-        assert(bits.len() <= bits_count);
+    /*implicit*/ constexpr Stride(Bits<T> bits) noexcept {
+        debug_assert(bits.len() <= bits_count);
         inner = {static_cast<uint8_t>(bits.bits()), bits.len()};
     }
 
-    uint8_t value() const noexcept {
+    constexpr uint8_t value() const noexcept {
         return inner.value();
     }
 
@@ -194,11 +211,11 @@ private:
 };
 
 template <class T>
-uint8_t popcount(T x) {
+constexpr uint8_t popcount(T x) {
     return static_cast<uint8_t>(std::popcount(x));
 }
 
-inline uint8_t popcount(Uint128 x) {
+constexpr inline uint8_t popcount(Uint128 x) {
     return static_cast<uint8_t>(
             std::popcount(static_cast<uint64_t>(x & 0xffffffffffffffffull))
             + std::popcount(static_cast<uint64_t>(x >> 64)));
@@ -218,6 +235,160 @@ using BitmapIndexType = std::conditional_t<
                                            uint64_t,
                                            std::conditional_t<N == 7, Uint128, void>>>>>;
 
+template <uint8_t N>
+constexpr std::optional<uint8_t> find_longest_algo(uint8_t& values_before,
+                                                   BitmapIndexType<N> inner,
+                                                   Stride<N - 1> bits) noexcept {
+    static_assert(N <= 7);
+    constexpr auto u1 = static_cast<BitmapIndexType<N>>(1);
+    switch (bits.len()) {
+    case 6:
+        if (auto const idx = (u1 << (63 + (bits.bits() & 0b111111))); inner & idx) {
+            values_before = popcount(inner & (idx - 1));
+            return 6;
+        }
+        [[fallthrough]];
+    case 5:
+        if (auto const idx = (u1 << (31 + (bits.bits() & 0b11111))); inner & idx) {
+            values_before = popcount(inner & (idx - 1));
+            return 5;
+        }
+        [[fallthrough]];
+    case 4:
+        if (auto const idx = (1u << (15 + (bits.bits() & 0b1111))); inner & idx) {
+            values_before = popcount(inner & (idx - 1));
+            return 4;
+        }
+        [[fallthrough]];
+    case 3:
+        if (auto const idx = (1u << (7 + (bits.bits() & 0b111))); inner & idx) {
+            values_before = popcount(inner & (idx - 1));
+            return 3;
+        }
+        [[fallthrough]];
+    case 2:
+        if (auto const idx = (1u << (3 + (bits.bits() & 0b11))); inner & idx) {
+            values_before = popcount(inner & (idx - 1));
+            return 2;
+        }
+        [[fallthrough]];
+    case 1:
+        if (auto const idx = (1u << (1 + (bits.bits() & 0b1))); inner & idx) {
+            values_before = popcount(inner & (idx - 1));
+            return 1;
+        }
+        [[fallthrough]];
+    case 0:
+        if (inner & 1) {
+            values_before = 0;
+            return 0;
+        }
+    }
+    return std::nullopt;
+}
+
+template <uint8_t N>
+std::optional<uint8_t> find_longest_select(uint8_t& values_before,
+                                           BitmapIndexType<N> inner,
+                                           Stride<N - 1> bits) noexcept {
+    return find_longest_algo<N>(values_before, inner, bits);
+}
+
+template <uint8_t N>
+constexpr bool exists_algo(uint8_t& values_before,
+                           BitmapIndexType<N> inner,
+                           Stride<N - 1> bits) noexcept {
+    static_assert(N <= 7);
+    constexpr auto u1 = static_cast<BitmapIndexType<N>>(1);
+    switch (bits.len()) {
+    case 6: {
+        auto const idx = (u1 << (63 + bits.value()));
+        values_before = popcount(inner & (idx - 1));
+        return inner & idx;
+    }
+    case 5: {
+        auto const idx = (u1 << (31 + bits.value()));
+        values_before = popcount(inner & (idx - 1));
+        return inner & idx;
+    }
+    case 4: {
+        auto const idx = (1u << (15 + bits.value()));
+        values_before = popcount(inner & (idx - 1));
+        return inner & idx;
+    }
+    case 3: {
+        auto const idx = (1u << (7 + bits.value()));
+        values_before = popcount(inner & (idx - 1));
+        return inner & idx;
+    }
+    case 2: {
+        auto const idx = (1u << (3 + bits.value()));
+        values_before = popcount(inner & (idx - 1));
+        return inner & idx;
+    }
+    case 1: {
+        auto const idx = (1u << (1 + bits.value()));
+        values_before = popcount(inner & (idx - 1));
+        return inner & idx;
+    }
+    case 0:
+        values_before = 0;
+        return inner & 1;
+    }
+    assert(false);
+    return false;
+}
+
+template <size_t N>
+inline constexpr bool exists_ht(uint8_t& values_before,
+                                BitmapIndexType<N> inner,
+                                Stride<N - 1> bits) noexcept {
+    struct Record {
+        bool exists;
+        uint8_t values_before;
+    };
+
+    constexpr auto const index_count = Stride<N>::internal_bitmap_index_count;
+    constexpr auto const pss = 1 << ((N - 1) + std::bit_width(N - 1));
+
+    constexpr std::array<std::array<Record, pss>, (1 << index_count)> ht = [=] {
+        std::array<std::array<Record, pss>, (1 << index_count)> ht{};
+        for (auto i = 0u; i < (1 << index_count); ++i) {
+            Bits<uint32_t> idx{};
+            for (auto j = 0u; j < index_count; ++j, ++idx) {
+                auto const z = static_cast<size_t>(idx.len()) << (N - 1) | idx.value();
+                ht[i][z].exists =
+                        exists_algo<N>(ht[i][z].values_before, i, Stride<N - 1>{idx});
+            }
+        }
+        return ht;
+    }();
+
+    auto const z = static_cast<size_t>(bits.len()) << (N - 1) | bits.value();
+    values_before = ht[inner][z].values_before;
+    return ht[inner][z].exists;
+}
+
+template <uint8_t N>
+bool exists_select(uint8_t& values_before,
+                   BitmapIndexType<N> inner,
+                   Stride<N - 1> bits) noexcept {
+    return exists_algo<N>(values_before, inner, bits);
+}
+
+template <>
+inline bool exists_select<3>(uint8_t& values_before,
+                             BitmapIndexType<3> inner,
+                             Stride<2> bits) noexcept {
+    assert([&] {
+        uint8_t v1 = 0;
+        uint8_t v2 = 0;
+        return exists_algo<3>(v1, inner, bits) == exists_ht<3>(v2, inner, bits)
+            && v1 == v2;
+    }());
+    return exists_ht<3>(values_before, inner, bits);
+}
+
 // 0|0000000000000000|00000000|0000|00|0
 //                 16        8    4  2 1
 //                          15    7  3 1
@@ -228,13 +399,7 @@ class InternalBitmap {
     static constexpr auto u1 = static_cast<Int>(1);
 
 public:
-    constexpr static uint8_t index_count = [] {
-        uint8_t ret = 0;
-        for (uint8_t i = 0; i <= Stride<N - 1>::bits_count; ++i) {
-            ret += 1 << i;
-        }
-        return ret;
-    }();
+    constexpr static uint8_t index_count = Stride<N>::internal_bitmap_index_count;
 
     InternalBitmap() = default;
 
@@ -244,90 +409,11 @@ public:
 
     std::optional<uint8_t> find_longest(uint8_t& values_before,
                                         Stride<N - 1> bits) const noexcept {
-        switch (bits.len()) {
-        case 6:
-            if (auto const idx = (u1 << (63 + (bits.bits() & 0b111111))); inner & idx) {
-                values_before = popcount(inner & (idx - 1));
-                return 6;
-            }
-            [[fallthrough]];
-        case 5:
-            if (auto const idx = (u1 << (31 + (bits.bits() & 0b11111))); inner & idx) {
-                values_before = popcount(inner & (idx - 1));
-                return 5;
-            }
-            [[fallthrough]];
-        case 4:
-            if (auto const idx = (1u << (15 + (bits.bits() & 0b1111))); inner & idx) {
-                values_before = popcount(inner & (idx - 1));
-                return 4;
-            }
-            [[fallthrough]];
-        case 3:
-            if (auto const idx = (1u << (7 + (bits.bits() & 0b111))); inner & idx) {
-                values_before = popcount(inner & (idx - 1));
-                return 3;
-            }
-            [[fallthrough]];
-        case 2:
-            if (auto const idx = (1u << (3 + (bits.bits() & 0b11))); inner & idx) {
-                values_before = popcount(inner & (idx - 1));
-                return 2;
-            }
-            [[fallthrough]];
-        case 1:
-            if (auto const idx = (1u << (1 + (bits.bits() & 0b1))); inner & idx) {
-                values_before = popcount(inner & (idx - 1));
-                return 1;
-            }
-            [[fallthrough]];
-        case 0:
-            if (inner & 1) {
-                values_before = 0;
-                return 0;
-            }
-        }
-        return std::nullopt;
+        return find_longest_select<N>(values_before, inner, bits);
     }
 
     bool exists(uint8_t& values_before, Stride<N - 1> bits) const noexcept {
-        switch (bits.len()) {
-        case 6: {
-            auto const idx = (u1 << (63 + bits.value()));
-            values_before = popcount(inner & (idx - 1));
-            return inner & idx;
-        }
-        case 5: {
-            auto const idx = (u1 << (31 + bits.value()));
-            values_before = popcount(inner & (idx - 1));
-            return inner & idx;
-        }
-        case 4: {
-            auto const idx = (1u << (15 + bits.value()));
-            values_before = popcount(inner & (idx - 1));
-            return inner & idx;
-        }
-        case 3: {
-            auto const idx = (1u << (7 + bits.value()));
-            values_before = popcount(inner & (idx - 1));
-            return inner & idx;
-        }
-        case 2: {
-            auto const idx = (1u << (3 + bits.value()));
-            values_before = popcount(inner & (idx - 1));
-            return inner & idx;
-        }
-        case 1: {
-            auto const idx = (1u << (1 + bits.value()));
-            values_before = popcount(inner & (idx - 1));
-            return inner & idx;
-        }
-        case 0:
-            values_before = 0;
-            return inner & 1;
-        }
-        assert(false);
-        return false;
+        return exists_select<N>(values_before, inner, bits);
     }
 
     uint8_t total() const noexcept {
@@ -734,7 +820,7 @@ private:
     };
     static_assert(sizeof(Cell) == sizeof(Node<N>));
 
-    std::array<Cell, Stride<N>::index_count + 1 /*meta*/> resident{};
+    std::array<Cell, Stride<N>::external_bitmap_index_count + 1 /*meta*/> resident{};
     Cell* used_head{new (resident.data()) Cell{
             .block = Block{static_cast<uint8_t>(resident.size()), 1, nullptr}}};
     Cell* useless_head{nullptr};

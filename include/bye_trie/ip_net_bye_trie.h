@@ -87,9 +87,11 @@ inline Uint128 reverse_bits_of_bytes(
 
 } // namespace detail
 
+inline constexpr uint8_t stride = 5;
+
 template <class PrefixType, UnsignedIntegral IntType, TrivialLittleObject T>
 class IpNetSubsIterator {
-    using Inner = SubsIterator<IntType, T, 5>;
+    using Inner = SubsIterator<IntType, T, stride>;
 
 public:
     explicit IpNetSubsIterator(Inner&& x) noexcept(false)
@@ -143,7 +145,7 @@ class IpNetByeTrieSubs {
 public:
     using ValueType = typename IpNetSubsIterator<PrefixType, P, T>::value_type;
 
-    explicit IpNetByeTrieSubs(ByeTrieSubs<P, T>&& inner) noexcept(false)
+    explicit IpNetByeTrieSubs(ByeTrieSubs<P, T, stride>&& inner) noexcept(false)
             : inner{std::move(inner)} {
     }
 
@@ -156,12 +158,12 @@ public:
     }
 
 private:
-    ByeTrieSubs<P, T> inner;
+    ByeTrieSubs<P, T, stride> inner;
 };
 
 template <class IpNetType, UnsignedIntegral IntType, class T, class Allocator>
-class IpNetByeTrie : private ByeTrie<IntType, T, Allocator> {
-    using Base = ByeTrie<IntType, T, Allocator, 5>;
+class IpNetByeTrie : private ByeTrie<IntType, T, Allocator, stride> {
+    using Base = ByeTrie<IntType, T, Allocator, stride>;
 
     using IpNetTypeCopyOptimized =
             std::conditional_t<sizeof(IpNetType) <= 16, IpNetType, IpNetType const&>;
