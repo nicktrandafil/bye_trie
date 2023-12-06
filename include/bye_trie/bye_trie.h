@@ -86,12 +86,18 @@ public:
     }
 
     constexpr T value() const noexcept {
-        return take_slice(bits_, 0, len_);
+        assert(len_ <= sizeof(T) * CHAR_BIT);
+        return (len_ == sizeof(T) * CHAR_BIT) ? bits_ : (bits_ & ((T(1) << len_) - 1));
     }
 
-    Bits sub(uint8_t offset) const noexcept {
-        return Bits{take_slice(bits_, offset, len_ - offset),
-                    static_cast<uint8_t>(len_ - offset)};
+    Bits suffix(uint8_t offset) const noexcept {
+        assert(offset < sizeof(T) * CHAR_BIT);
+        return Bits{bits_ >> offset, static_cast<uint8_t>(len_ - offset)};
+    }
+
+    Bits prefix(uint8_t len) const noexcept {
+        assert(len < sizeof(T) * CHAR_BIT);
+        return Bits{(bits_ & ((T(1) << len) - 1)), len};
     }
 
     Bits sub(uint8_t offset, uint8_t len) const noexcept {
@@ -134,7 +140,7 @@ public:
     }
 
     std::pair<Bits, Bits> split_at(uint8_t offset) const noexcept {
-        return {sub(0, offset), sub(offset)};
+        return {prefix(offset), suffix(offset)};
     }
 
     friend std::ostream& operator<<(std::ostream& os, Bits val) noexcept {
@@ -1164,15 +1170,15 @@ private:
                                  Bits<P>& prefix,
                                  auto on_node) noexcept {
         while (prefix.len() >= detail::Stride<N>::bits_count) {
-            on_node(*node, prefix.sub(0, detail::Stride<N - 1>::bits_count));
-            auto const slice = prefix.sub(0, detail::Stride<N>::bits_count);
+            on_node(*node, prefix.prefix(detail::Stride<N - 1>::bits_count));
+            auto const slice = prefix.prefix(detail::Stride<N>::bits_count);
             if (node->external_bitmap.exists(slice)) {
                 auto const vec_idx = node->external_bitmap.before(slice);
                 node = &node->children[vec_idx].node;
             } else {
                 break;
             }
-            prefix = prefix.sub(detail::Stride<N>::bits_count);
+            prefix = prefix.suffix(detail::Stride<N>::bits_count);
         }
     }
 
@@ -1181,7 +1187,7 @@ private:
     void extend_leaf(detail::Node<N>*& node,
                      Bits<P>& prefix) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
         while (prefix.len() >= detail::Stride<N>::bits_count) {
-            auto const slice = prefix.sub(0, detail::Stride<N>::bits_count);
+            auto const slice = prefix.prefix(detail::Stride<N>::bits_count);
             auto const vec_idx = node->external_bitmap.before(slice);
 
             node->children = detail::NodeVec{node->children,
@@ -1191,7 +1197,7 @@ private:
             node->external_bitmap.set(slice);
 
             node = &node->children[vec_idx].node;
-            prefix = prefix.sub(detail::Stride<N>::bits_count);
+            prefix = prefix.suffix(detail::Stride<N>::bits_count);
         }
     }
 
