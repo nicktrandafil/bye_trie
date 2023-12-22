@@ -700,6 +700,10 @@ public:
     using value_type = struct value_type {
         bool operator==(value_type const& rhs) const noexcept = default;
 
+        friend std::ostream& operator<<(std::ostream& os, value_type const& x) {
+            return os << "Value{" << x.prefix << ", " << x.value << "}";
+        }
+
         Bits<P> prefix;
         T value;
     };
@@ -708,7 +712,7 @@ public:
     using reference = value_type;
 
     reference operator*() const noexcept {
-        auto const slice = this->fixed.concatenated(reminder);
+        auto const slice = this->fixed_bits.concatenated(value_iter_bits);
         auto const prefix = this->prefix.concatenated(slice);
         uint8_t vec_idx = 0;
         auto const exists = node.internal_bitmap.exists(vec_idx, slice);
@@ -722,60 +726,66 @@ public:
     }
 
     Iterator& operator++() noexcept(false) {
-        ++reminder;
-        do {
+        ++value_iter_bits;
+        while (true) {
             // find next prefix in current node
             {
-                auto slice = fixed.concatenated(reminder);
+                auto slice = fixed_bits.concatenated(value_iter_bits);
                 while (slice.len() < detail::stride) {
                     uint8_t vec_idx;
                     if (node.internal_bitmap.exists(vec_idx, slice)) {
                         return *this;
                     }
-                    ++reminder;
-                    slice = fixed.concatenated(reminder);
+                    ++value_iter_bits;
+                    slice = fixed_bits.concatenated(value_iter_bits);
                 }
             }
 
-            // add branches of current node to the queue
+            // go to next child
             {
-                auto reminder =
-                        Bits<P>{0, static_cast<uint8_t>(detail::stride - fixed.len())};
-                auto slice = fixed.concatenated(reminder);
-                auto const branches =
-                        detail::NodeVec{node.children, node.external_bitmap.total(), 0}
-                                .branches();
-                states.reserve(states.size() + branches.size());
-                while (slice.len() <= detail::stride) {
-                    if (node.external_bitmap.exists(slice)) {
-                        states.push_back(
-                                State{branches[node.external_bitmap.before(slice)].node,
-                                      prefix.concatenated(slice)});
-                    }
-                    ++reminder;
-                    slice = fixed.concatenated(reminder);
+                auto slice = fixed_bits.concatenated(child_iter_bits);
+                while (slice.len() <= detail::stride
+                       && !node.external_bitmap.exists(slice)) {
+                    ++child_iter_bits;
+                    slice = fixed_bits.concatenated(child_iter_bits);
+                }
+
+                if (slice.len() <= detail::stride) {
+                    auto const branches = detail::NodeVec{node.children,
+                                                          node.external_bitmap.total(),
+                                                          0}
+                                                  .branches();
+                    path.emplace_back(node, prefix, fixed_bits, child_iter_bits);
+                    prefix = prefix.concatenated(slice);
+                    node = branches[node.external_bitmap.before(slice)].node;
+                    fixed_bits = value_iter_bits = {};
+                    child_iter_bits = Bits<P>{0, detail::stride};
+                    continue;
                 }
             }
 
-            // pop next node from the queue
-            if (!states.empty()) {
-                node = states.front().node;
-                prefix = states.front().prefix;
-                states.erase(states.begin());
-                fixed = reminder = {};
+            // go back to the parent
+            if (!path.empty()) {
+                node = path.back().node;
+                prefix = path.back().prefix;
+                fixed_bits = path.back().fixed_bits;
+                value_iter_bits = Bits<P>(0, detail::stride - fixed_bits.len());
+                child_iter_bits = path.back().child_iter_bits;
+                ++child_iter_bits;
+                path.pop_back();
             } else {
                 node = {};
-                prefix = fixed = reminder = {};
+                prefix = fixed_bits = value_iter_bits = child_iter_bits = {};
                 break;
             }
-        } while (true);
-
+        }
         return *this;
     }
 
     bool operator==(Iterator const& rhs) const noexcept {
         return prefix == rhs.prefix
-            && fixed.concatenated(reminder) == rhs.fixed.concatenated(rhs.reminder);
+            && fixed_bits.concatenated(value_iter_bits)
+                       == rhs.fixed_bits.concatenated(rhs.value_iter_bits);
     }
 
 private:
@@ -784,30 +794,31 @@ private:
 
     explicit Iterator(detail::Node node, Bits<P> prefix) noexcept(false)
             : node{node} {
-        std::tie(this->prefix, this->fixed) = prefix.split_at(detail::leaf_pos(prefix));
-        assert(fixed.len() < detail::stride);
-        this->reminder = Bits<P>(0, 0);
+        std::tie(this->prefix, this->fixed_bits) =
+                prefix.split_at(detail::leaf_pos(prefix));
+        assert(fixed_bits.len() < detail::stride);
+        this->value_iter_bits = Bits<P>(0, 0);
+        this->child_iter_bits = Bits<P>(0, detail::stride - this->fixed_bits.len());
         uint8_t vec_idx;
-        auto const slice = fixed.concatenated(reminder);
+        auto const slice = fixed_bits.concatenated(value_iter_bits);
         if (!node.internal_bitmap.exists(vec_idx, slice)) {
             ++(*this);
         }
     }
 
-    //                     0|0000000000000000|00000000|0000|00|0
-    // slice len                            4        3    2  1 0
-    // bitmap len or count                 16        8    4  2 1
-    // accumulated count                   31       15    7  3 1
     struct State {
         detail::Node node;
         Bits<P> prefix;
+        Bits<P> fixed_bits;
+        Bits<P> child_iter_bits;
     };
 
     detail::Node node;
     Bits<P> prefix;
-    Bits<P> fixed;
-    Bits<P> reminder;
-    std::vector<State> states;
+    Bits<P> fixed_bits;
+    Bits<P> value_iter_bits;
+    Bits<P> child_iter_bits;
+    std::vector<State> path;
 };
 
 /// Initial Array Optimization of size 65536.
