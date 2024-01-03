@@ -792,6 +792,9 @@ private:
     template <UnsignedIntegral, TrivialLittleObject, Allocator, class>
     friend class ByeTrie;
 
+    template <UnsignedIntegral, TrivialLittleObject>
+    friend class ByeTrieSubs;
+
     explicit Iterator(detail::Node node, Bits<P> prefix) noexcept(false)
             : node{node} {
         std::tie(this->prefix, this->fixed_bits) =
@@ -819,6 +822,29 @@ private:
     Bits<P> value_iter_bits;
     Bits<P> child_iter_bits;
     std::vector<State> path;
+};
+
+template <UnsignedIntegral P, TrivialLittleObject T>
+class ByeTrieSubs {
+public:
+    Iterator<P, T> begin() const noexcept(false) {
+        return begin_;
+    }
+
+    Iterator<P, T> end() const noexcept(false) {
+        return Iterator<P, T>{{}, {}};
+    }
+
+private:
+    template <UnsignedIntegral, TrivialLittleObject, Allocator, class>
+    friend class ByeTrie;
+
+    explicit ByeTrieSubs(detail::Node node, Bits<P> prefix) noexcept(false)
+            : begin_{Iterator<P, T>{node, prefix}} {
+    }
+
+private:
+    Iterator<P, T> begin_;
 };
 
 /// Initial Array Optimization of size 65536.
@@ -908,7 +934,7 @@ public:
         return prev ? std::optional(std::bit_cast<T>(*prev)) : std::nullopt;
     }
 
-    /// Replace the exact prefix is present otherwise insert.
+    /// Replace the exact prefix if present otherwise insert.
     /// \post Strong exception guarantee
     /// \return Previous value
     /// \throw Forwards `Alloc::realloc` exception
@@ -1094,6 +1120,20 @@ public:
     template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0>>* = nullptr>
     Iterator<P, T> end() const noexcept(false) {
         return Iterator<P, T>{{}, {}};
+    }
+
+    /// View to sub networks of `prefix`
+    /// \throw std::bad_alloc
+    ByeTrieSubs<P, T> subs(Bits<P> prefix) const noexcept(false) {
+        auto suffix = prefix;
+        detail::Node* node = &roots_.root(suffix);
+
+        find_leaf_branch(node, suffix, noop);
+        if (suffix.len() > detail::stride_m_1) {
+            return ByeTrieSubs<P, T>{{}, prefix};
+        }
+
+        return ByeTrieSubs<P, T>{*node, prefix};
     }
 
 private:
