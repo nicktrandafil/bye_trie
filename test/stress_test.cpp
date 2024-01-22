@@ -48,8 +48,6 @@ TEST_CASE("Load big data and match every prefix", "[stress]") {
         REQUIRE(*trie.match_exact(prefix) == value);
         REQUIRE(*trie.match_longest(prefix)
                 == (std::pair<uint8_t, long>{prefix.len(), value}));
-        REQUIRE(*trie.find_exact(prefix) == (Value{prefix, value}));
-        REQUIRE(*trie.find_longest(prefix) == (Value{prefix, value}));
         REQUIRE(*trie.subs(prefix).begin() == (Value{prefix, value}));
     }
 }

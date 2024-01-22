@@ -694,7 +694,7 @@ concept Allocator = std::is_nothrow_move_constructible_v<T>
                     };
 
 template <UnsignedIntegral P, TrivialLittleObject T>
-class Iterator {
+class SubsIterator {
 public:
     using iterator_category = std::input_iterator_tag;
     using value_type = struct value_type {
@@ -725,7 +725,7 @@ public:
                                          .values()[vec_idx])};
     }
 
-    Iterator& operator++() noexcept(false) {
+    SubsIterator& operator++() noexcept(false) {
         ++value_iter_bits;
         while (true) {
             // find next prefix in current node
@@ -782,7 +782,7 @@ public:
         return *this;
     }
 
-    bool operator==(Iterator const& rhs) const noexcept {
+    bool operator==(SubsIterator const& rhs) const noexcept {
         return prefix == rhs.prefix
             && fixed_bits.concatenated(value_iter_bits)
                        == rhs.fixed_bits.concatenated(rhs.value_iter_bits);
@@ -795,7 +795,7 @@ private:
     template <UnsignedIntegral, TrivialLittleObject>
     friend class ByeTrieSubs;
 
-    explicit Iterator(detail::Node node, Bits<P> prefix) noexcept(false)
+    explicit SubsIterator(detail::Node node, Bits<P> prefix) noexcept(false)
             : node{node} {
         std::tie(this->prefix, this->fixed_bits) =
                 prefix.split_at(detail::leaf_pos(prefix));
@@ -827,12 +827,12 @@ private:
 template <UnsignedIntegral P, TrivialLittleObject T>
 class ByeTrieSubs {
 public:
-    Iterator<P, T> begin() const noexcept(false) {
+    SubsIterator<P, T> begin() const noexcept(false) {
         return begin_;
     }
 
-    Iterator<P, T> end() const noexcept(false) {
-        return Iterator<P, T>{{}, {}};
+    SubsIterator<P, T> end() const noexcept(false) {
+        return SubsIterator<P, T>{{}, {}};
     }
 
 private:
@@ -840,11 +840,11 @@ private:
     friend class ByeTrie;
 
     explicit ByeTrieSubs(detail::Node node, Bits<P> prefix) noexcept(false)
-            : begin_{Iterator<P, T>{node, prefix}} {
+            : begin_{SubsIterator<P, T>{node, prefix}} {
     }
 
 private:
-    Iterator<P, T> begin_;
+    SubsIterator<P, T> begin_;
 };
 
 /// Initial Array Optimization of size 65536.
@@ -893,7 +893,7 @@ template <UnsignedIntegral P,
           class Iar = Iar0>
 class ByeTrie {
 public:
-    using ValueType = typename Iterator<P, T>::value_type;
+    using ValueType = typename SubsIterator<P, T>::value_type;
 
     explicit ByeTrie() noexcept(noexcept(Alloc{}))
             : alloc_{}
@@ -973,26 +973,6 @@ public:
                                         .value(vec_idx));
     }
 
-    /// Counterpart of `match_exact` which returns an iterator.
-    /// \throw std::bad_alloc
-    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0>>* = nullptr>
-    Iterator<P, T> find_exact(Bits<P> prefix) const noexcept(false) {
-        auto suffix = prefix;
-        detail::Node* node = &roots_.root(suffix);
-
-        find_leaf_branch(node, suffix, noop);
-        if (suffix.len() > detail::stride_m_1) {
-            return end();
-        }
-
-        uint8_t vec_idx;
-        if (!node->internal_bitmap.exists(vec_idx, suffix)) {
-            return end();
-        }
-
-        return Iterator<P, T>{*node, prefix};
-    }
-
     /// Match longest prefix.
     std::optional<std::pair<uint8_t, T>> match_longest(Bits<P> prefix) const noexcept {
         detail::Node* node = &roots_.root(prefix);
@@ -1020,35 +1000,6 @@ public:
         }
 
         return longest;
-    }
-
-    /// Counterpart of `match_longest` which returns an iterator.
-    /// \throw std::bad_alloc
-    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0>>* = nullptr>
-    Iterator<P, T> find_longest(Bits<P> prefix) const noexcept(false) {
-        auto suffix = prefix;
-        detail::Node* node = &roots_.root(suffix);
-
-        std::optional<std::pair<uint8_t, detail::Node>> longest;
-        uint8_t offset = Iar::len;
-        auto const update_longest = [&longest, &offset](auto node, auto slice) {
-            uint8_t vec_idx;
-            if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
-                longest = std::pair{static_cast<uint8_t>(offset + len.value()), node};
-            }
-            offset += detail::stride;
-        };
-
-        find_leaf_branch(node, suffix, update_longest);
-        if (suffix.len() < detail::stride) {
-            update_longest(*node, suffix);
-        }
-
-        if (longest) {
-            return Iterator<P, T>{longest->second, prefix.sub(0, longest->first)};
-        } else {
-            return end();
-        }
     }
 
     /// Erase exact prefix.
@@ -1110,16 +1061,6 @@ public:
 
     Alloc& alloc() noexcept {
         return alloc_;
-    }
-
-    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0>>* = nullptr>
-    Iterator<P, T> begin() const noexcept(false) {
-        return Iterator<P, T>{roots_.root(Bits<P>{}), Bits<P>{0, 0}};
-    }
-
-    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0>>* = nullptr>
-    Iterator<P, T> end() const noexcept(false) {
-        return Iterator<P, T>{{}, {}};
     }
 
     /// View to sub networks of `prefix`

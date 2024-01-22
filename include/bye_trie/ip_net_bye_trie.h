@@ -88,11 +88,11 @@ inline Uint128 reverse_bits_of_bytes(
 } // namespace detail
 
 template <class PrefixType, UnsignedIntegral IntType, TrivialLittleObject T>
-class IpNetIterator {
-    using Inner = Iterator<IntType, T>;
+class IpNetSubsIterator {
+    using Inner = SubsIterator<IntType, T>;
 
 public:
-    explicit IpNetIterator(Inner x) noexcept(false)
+    explicit IpNetSubsIterator(Inner&& x) noexcept(false)
             : inner{x} {
     }
 
@@ -125,17 +125,36 @@ public:
         };
     }
 
-    IpNetIterator& operator++() noexcept(false) {
+    IpNetSubsIterator& operator++() noexcept(false) {
         ++inner;
         return *this;
     }
 
-    bool operator==(IpNetIterator const& rhs) const noexcept {
+    bool operator==(IpNetSubsIterator const& rhs) const noexcept {
         return inner == rhs.inner;
     }
 
 private:
     Inner inner;
+};
+
+template <class PrefixType, UnsignedIntegral P, TrivialLittleObject T>
+class IpNetByeTrieSubs {
+public:
+    explicit IpNetByeTrieSubs(ByeTrieSubs<P, T>&& inner) noexcept(false)
+            : inner{std::move(inner)} {
+    }
+
+    IpNetSubsIterator<PrefixType, P, T> begin() const noexcept(false) {
+        return IpNetSubsIterator<PrefixType, P, T>{inner.begin()};
+    }
+
+    IpNetSubsIterator<PrefixType, P, T> end() const noexcept(false) {
+        return IpNetSubsIterator<PrefixType, P, T>{inner.end()};
+    }
+
+private:
+    ByeTrieSubs<P, T> inner;
 };
 
 template <class IpNetType, UnsignedIntegral IntType, class T, class Allocator>
@@ -149,7 +168,7 @@ public:
     using Base::Base;
     using Base::size;
 
-    using ValueType = typename IpNetIterator<IpNetType, IntType, T>::value_type;
+    using ValueType = typename IpNetSubsIterator<IpNetType, IntType, T>::value_type;
 
     auto insert(IpNetTypeCopyOptimized prefix,
                 T value) noexcept(noexcept(Base::insert({}, {}))) {
@@ -188,26 +207,10 @@ public:
         return std::pair{IpNetType{prefix.address(), prefix_length}, value};
     }
 
-    IpNetIterator<IpNetType, IntType, T> find_exact(IpNetTypeCopyOptimized prefix) const
-            noexcept(false) {
-        return IpNetIterator<IpNetType, IntType, T>{Base::find_exact(
+    auto subs(IpNetTypeCopyOptimized prefix) const noexcept(false) {
+        return IpNetByeTrieSubs<IpNetType, IntType, T>{Base::subs(
                 Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
                      static_cast<uint8_t>(prefix.prefix_length())})};
-    }
-
-    IpNetIterator<IpNetType, IntType, T> find_longest(IpNetTypeCopyOptimized prefix) const
-            noexcept(false) {
-        return IpNetIterator<IpNetType, IntType, T>{Base::find_longest(
-                Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
-                     static_cast<uint8_t>(prefix.prefix_length())})};
-    }
-
-    IpNetIterator<IpNetType, IntType, T> begin() const noexcept(false) {
-        return IpNetIterator<IpNetType, IntType, T>{Base::begin()};
-    }
-
-    IpNetIterator<IpNetType, IntType, T> end() const noexcept(false) {
-        return IpNetIterator<IpNetType, IntType, T>{Base::end()};
     }
 };
 
