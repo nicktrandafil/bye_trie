@@ -729,6 +729,30 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][ByeTrieSubsIterator]", Ns) {
     }
 }
 
+struct Value {
+    bool operator==(Value const& rhs) const noexcept = default;
+
+    friend std::ostream& operator<<(std::ostream& os, Value const& x) {
+        return os << "Value{" << x.prefix << ", " << x.value << "}";
+    }
+
+    Bits<unsigned> prefix;
+    unsigned value;
+};
+
+TEST_CASE("", "[ByeTrie][visit_supers]") {
+    using ByeTrie = ByeTrie<uint32_t, long>;
+    ByeTrie trie;
+    trie.insert(Bits{0x00'00'00'00u, 0}, 0);
+    trie.insert(Bits{0x01'00'00'00u, 1}, 1);
+    trie.insert(Bits{0x02'00'00'00u, 2}, 2);
+    trie.insert(Bits{0x02'01'00'00u, 10}, 3);
+    std::vector<Value> actual, expected;
+    trie.visit_supers(Bits{0x02'01'00'00u, 10},
+                      [&actual](auto p, auto v) { actual.emplace_back(p, v); });
+    REQUIRE(actual == expected);
+}
+
 TEST_CASE("Move assignment", "[ByeTrie]") {
     ByeTrie<uint32_t, long> trie;
     trie.insert(Bits{0u, 32}, 1);
@@ -752,6 +776,7 @@ TEST_CASE(
     trie.match_exact(Bits<Uint128>{0u, 0});
     trie.match_longest(Bits<Uint128>{0u, 0});
     trie.subs(Bits<Uint128>{0u, 0});
+    trie.visit_supers(Bits<Uint128>{0u, 0}, [](auto, auto) {});
 }
 
 TEST_CASE("Initial array optimization", "[ByeTrie][Iar]") {
@@ -767,6 +792,14 @@ TEST_CASE("Initial array optimization", "[ByeTrie][Iar]") {
     trie.insert(Bits{0u, 24}, 3);
     REQUIRE(trie.match_exact(Bits{0u, 24}) == 3);
     REQUIRE(trie.match_exact(Bits{1u, 24}) == std::nullopt);
+
+    int n = 0;
+    trie.visit_supers(Bits{0u, 16}, [&n](auto p, auto v) {
+        CHECK(p == Bits{0u, 16});
+        CHECK(v == 2);
+        ++n;
+    });
+    REQUIRE(n == 1);
 }
 
 TEST_CASE("", "[playground]") {
