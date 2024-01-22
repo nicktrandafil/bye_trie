@@ -1166,6 +1166,33 @@ public:
         return ByeTrieSubs<P, T, N>{*node, prefix};
     }
 
+    template <class F>
+    void visit_supers(Bits<P> prefix, F const& on_super) const
+            noexcept(noexcept(on_super(std::declval<Bits<P>>(), std::declval<T>()))) {
+        auto suffix = prefix;
+        detail::Node<N>* node = &roots_.root(suffix);
+
+        uint8_t offset = Iar::len;
+        auto const visit = [&offset, prefix, &on_super](auto node, auto slice) {
+            uint8_t vec_idx = 0;
+            if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
+                on_super(prefix.sub(0, offset + len.value()),
+                         std::bit_cast<T>(
+                                 detail::NodeVec{node.children,
+                                                 node.external_bitmap.total(),
+                                                 static_cast<uint8_t>(vec_idx + 1)}
+                                         .value(vec_idx)));
+            }
+            offset += detail::Stride<N>::bits_count;
+        };
+
+        find_leaf_branch(node, suffix, visit);
+
+        if (suffix.len() < detail::Stride<N>::bits_count) {
+            visit(*node, suffix);
+        }
+    }
+
 private:
     static constexpr auto noop = [](auto...) {};
 
