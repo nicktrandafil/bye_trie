@@ -578,7 +578,7 @@ TEST_CASE("Exception guarantee", "[ByeTrie][insert]") {
 
 TEST_CASE("", "[ByeTrie][ByeTrieSubsIterator]") {
     using ByeTrie = ByeTrie<uint32_t, long>;
-    using Value = ByeTrie::ValueType;
+    using Value = ByeTrieSubs<uint32_t, long>::ValueType;
     ByeTrie trie;
 
     SECTION("0/0 exists, begin() doesn't seek the first prefix") {
@@ -655,7 +655,7 @@ TEST_CASE("", "[ByeTrie][ByeTrieSubsIterator]") {
         trie.insert(Bits{0x040fffffu, 32}, 4);
         auto const subs = trie.subs(Bits{0x00ffffffu, 24});
         std::vector<Value> values;
-        for (auto const& x: subs) {
+        for (auto const& x : subs) {
             values.push_back(x);
         }
         std::vector<Value> const expected{Value{Bits{0x00ffffffu, 24}, 1},

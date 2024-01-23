@@ -77,7 +77,7 @@ TEST_CASE(
 TEST_CASE("Indirect testing of IteratorV4::operator*()", "[white-box]") {
     SECTION("ByeTrieV4") {
         ByeTrieV4<long> trie;
-        using Value = ByeTrieV4<long>::ValueType;
+        using Value = ByeTrieSubsV4<long>::ValueType;
         REQUIRE(trie.insert(make_network_v4("25.0.0.0/8"), 1) == std::nullopt);
 
         REQUIRE(*trie.subs(make_network_v4("25.1.0.0/8")).begin()
@@ -86,7 +86,7 @@ TEST_CASE("Indirect testing of IteratorV4::operator*()", "[white-box]") {
 
     SECTION("ByeTrieV6") {
         ByeTrieV6<long> trie;
-        using Value = ByeTrieV6<long>::ValueType;
+        using Value = ByeTrieSubsV6<long>::ValueType;
         REQUIRE(trie.insert(make_network_v6("::/0"), 1) == std::nullopt);
 
         REQUIRE(*trie.subs(make_network_v6("::/0")).begin()

@@ -141,6 +141,8 @@ private:
 template <class PrefixType, UnsignedIntegral P, TrivialLittleObject T>
 class IpNetByeTrieSubs {
 public:
+    using ValueType = typename IpNetSubsIterator<PrefixType, P, T>::value_type;
+
     explicit IpNetByeTrieSubs(ByeTrieSubs<P, T>&& inner) noexcept(false)
             : inner{std::move(inner)} {
     }
@@ -167,8 +169,6 @@ class IpNetByeTrie : private ByeTrie<IntType, T, Allocator> {
 public:
     using Base::Base;
     using Base::size;
-
-    using ValueType = typename IpNetSubsIterator<IpNetType, IntType, T>::value_type;
 
     auto insert(IpNetTypeCopyOptimized prefix,
                 T value) noexcept(noexcept(Base::insert({}, {}))) {
@@ -213,6 +213,12 @@ public:
                      static_cast<uint8_t>(prefix.prefix_length())})};
     }
 };
+
+template <class T>
+using ByeTrieSubsV4 = IpNetByeTrieSubs<boost::asio::ip::network_v4, uint32_t, T>;
+
+template <class T>
+using ByeTrieSubsV6 = IpNetByeTrieSubs<boost::asio::ip::network_v6, Uint128, T>;
 
 template <class T, class Allocator = SystemAllocator>
 class ByeTrieV4

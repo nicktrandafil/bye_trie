@@ -827,6 +827,8 @@ private:
 template <UnsignedIntegral P, TrivialLittleObject T>
 class ByeTrieSubs {
 public:
+    using ValueType = typename SubsIterator<P, T>::value_type;
+
     SubsIterator<P, T> begin() const noexcept(false) {
         return begin_;
     }
@@ -893,8 +895,6 @@ template <UnsignedIntegral P,
           class Iar = Iar0>
 class ByeTrie {
 public:
-    using ValueType = typename SubsIterator<P, T>::value_type;
-
     explicit ByeTrie() noexcept(noexcept(Alloc{}))
             : alloc_{}
             , roots_{} {
