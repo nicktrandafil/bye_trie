@@ -694,11 +694,15 @@ concept Allocator = std::is_nothrow_move_constructible_v<T>
                     };
 
 template <UnsignedIntegral P, TrivialLittleObject T>
-class Iterator {
+class SubsIterator {
 public:
     using iterator_category = std::input_iterator_tag;
     using value_type = struct value_type {
         bool operator==(value_type const& rhs) const noexcept = default;
+
+        friend std::ostream& operator<<(std::ostream& os, value_type const& x) {
+            return os << "Value{" << x.prefix << ", " << x.value << "}";
+        }
 
         Bits<P> prefix;
         T value;
@@ -708,7 +712,7 @@ public:
     using reference = value_type;
 
     reference operator*() const noexcept {
-        auto const slice = this->fixed.concatenated(reminder);
+        auto const slice = this->fixed_bits.concatenated(value_iter_bits);
         auto const prefix = this->prefix.concatenated(slice);
         uint8_t vec_idx = 0;
         auto const exists = node.internal_bitmap.exists(vec_idx, slice);
@@ -721,93 +725,128 @@ public:
                                          .values()[vec_idx])};
     }
 
-    Iterator& operator++() noexcept(false) {
-        ++reminder;
-        do {
+    SubsIterator& operator++() noexcept(false) {
+        ++value_iter_bits;
+        while (true) {
             // find next prefix in current node
             {
-                auto slice = fixed.concatenated(reminder);
+                auto slice = fixed_bits.concatenated(value_iter_bits);
                 while (slice.len() < detail::stride) {
                     uint8_t vec_idx;
                     if (node.internal_bitmap.exists(vec_idx, slice)) {
                         return *this;
                     }
-                    ++reminder;
-                    slice = fixed.concatenated(reminder);
+                    ++value_iter_bits;
+                    slice = fixed_bits.concatenated(value_iter_bits);
                 }
             }
 
-            // add branches of current node to the queue
+            // go to next child
             {
-                auto reminder =
-                        Bits<P>{0, static_cast<uint8_t>(detail::stride - fixed.len())};
-                auto slice = fixed.concatenated(reminder);
-                auto const branches =
-                        detail::NodeVec{node.children, node.external_bitmap.total(), 0}
-                                .branches();
-                states.reserve(states.size() + branches.size());
-                while (slice.len() <= detail::stride) {
-                    if (node.external_bitmap.exists(slice)) {
-                        states.push_back(
-                                State{branches[node.external_bitmap.before(slice)].node,
-                                      prefix.concatenated(slice)});
-                    }
-                    ++reminder;
-                    slice = fixed.concatenated(reminder);
+                auto slice = fixed_bits.concatenated(child_iter_bits);
+                while (slice.len() <= detail::stride
+                       && !node.external_bitmap.exists(slice)) {
+                    ++child_iter_bits;
+                    slice = fixed_bits.concatenated(child_iter_bits);
+                }
+
+                if (slice.len() <= detail::stride) {
+                    auto const branches = detail::NodeVec{node.children,
+                                                          node.external_bitmap.total(),
+                                                          0}
+                                                  .branches();
+                    path.emplace_back(node, prefix, fixed_bits, child_iter_bits);
+                    prefix = prefix.concatenated(slice);
+                    node = branches[node.external_bitmap.before(slice)].node;
+                    fixed_bits = value_iter_bits = {};
+                    child_iter_bits = Bits<P>{0, detail::stride};
+                    continue;
                 }
             }
 
-            // pop next node from the queue
-            if (!states.empty()) {
-                node = states.front().node;
-                prefix = states.front().prefix;
-                states.erase(states.begin());
-                fixed = reminder = {};
+            // go back to the parent
+            if (!path.empty()) {
+                node = path.back().node;
+                prefix = path.back().prefix;
+                fixed_bits = path.back().fixed_bits;
+                value_iter_bits = Bits<P>(0, detail::stride - fixed_bits.len());
+                child_iter_bits = path.back().child_iter_bits;
+                ++child_iter_bits;
+                path.pop_back();
             } else {
                 node = {};
-                prefix = fixed = reminder = {};
+                prefix = fixed_bits = value_iter_bits = child_iter_bits = {};
                 break;
             }
-        } while (true);
-
+        }
         return *this;
     }
 
-    bool operator==(Iterator const& rhs) const noexcept {
+    bool operator==(SubsIterator const& rhs) const noexcept {
         return prefix == rhs.prefix
-            && fixed.concatenated(reminder) == rhs.fixed.concatenated(rhs.reminder);
+            && fixed_bits.concatenated(value_iter_bits)
+                       == rhs.fixed_bits.concatenated(rhs.value_iter_bits);
     }
 
 private:
     template <UnsignedIntegral, TrivialLittleObject, Allocator, class>
     friend class ByeTrie;
 
-    explicit Iterator(detail::Node node, Bits<P> prefix) noexcept(false)
+    template <UnsignedIntegral, TrivialLittleObject>
+    friend class ByeTrieSubs;
+
+    explicit SubsIterator(detail::Node node, Bits<P> prefix) noexcept(false)
             : node{node} {
-        std::tie(this->prefix, this->fixed) = prefix.split_at(detail::leaf_pos(prefix));
-        assert(fixed.len() < detail::stride);
-        this->reminder = Bits<P>(0, 0);
+        std::tie(this->prefix, this->fixed_bits) =
+                prefix.split_at(detail::leaf_pos(prefix));
+        assert(fixed_bits.len() < detail::stride);
+        this->value_iter_bits = Bits<P>(0, 0);
+        this->child_iter_bits = Bits<P>(0, detail::stride - this->fixed_bits.len());
         uint8_t vec_idx;
-        auto const slice = fixed.concatenated(reminder);
+        auto const slice = fixed_bits.concatenated(value_iter_bits);
         if (!node.internal_bitmap.exists(vec_idx, slice)) {
             ++(*this);
         }
     }
 
-    //                     0|0000000000000000|00000000|0000|00|0
-    // slice len                            4        3    2  1 0
-    // bitmap len or count                 16        8    4  2 1
-    // accumulated count                   31       15    7  3 1
     struct State {
         detail::Node node;
         Bits<P> prefix;
+        Bits<P> fixed_bits;
+        Bits<P> child_iter_bits;
     };
 
     detail::Node node;
     Bits<P> prefix;
-    Bits<P> fixed;
-    Bits<P> reminder;
-    std::vector<State> states;
+    Bits<P> fixed_bits;
+    Bits<P> value_iter_bits;
+    Bits<P> child_iter_bits;
+    std::vector<State> path;
+};
+
+template <UnsignedIntegral P, TrivialLittleObject T>
+class ByeTrieSubs {
+public:
+    using ValueType = typename SubsIterator<P, T>::value_type;
+
+    SubsIterator<P, T> begin() const noexcept(false) {
+        return begin_;
+    }
+
+    SubsIterator<P, T> end() const noexcept(false) {
+        return SubsIterator<P, T>{{}, {}};
+    }
+
+private:
+    template <UnsignedIntegral, TrivialLittleObject, Allocator, class>
+    friend class ByeTrie;
+
+    explicit ByeTrieSubs(detail::Node node, Bits<P> prefix) noexcept(false)
+            : begin_{SubsIterator<P, T>{node, prefix}} {
+    }
+
+private:
+    SubsIterator<P, T> begin_;
 };
 
 /// Initial Array Optimization of size 65536.
@@ -856,8 +895,6 @@ template <UnsignedIntegral P,
           class Iar = Iar0>
 class ByeTrie {
 public:
-    using ValueType = typename Iterator<P, T>::value_type;
-
     explicit ByeTrie() noexcept(noexcept(Alloc{}))
             : alloc_{}
             , roots_{} {
@@ -897,7 +934,7 @@ public:
         return prev ? std::optional(std::bit_cast<T>(*prev)) : std::nullopt;
     }
 
-    /// Replace the exact prefix is present otherwise insert.
+    /// Replace the exact prefix if present otherwise insert.
     /// \post Strong exception guarantee
     /// \return Previous value
     /// \throw Forwards `Alloc::realloc` exception
@@ -936,26 +973,6 @@ public:
                                         .value(vec_idx));
     }
 
-    /// Counterpart of `match_exact` which returns an iterator.
-    /// \throw std::bad_alloc
-    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0>>* = nullptr>
-    Iterator<P, T> find_exact(Bits<P> prefix) const noexcept(false) {
-        auto suffix = prefix;
-        detail::Node* node = &roots_.root(suffix);
-
-        find_leaf_branch(node, suffix, noop);
-        if (suffix.len() > detail::stride_m_1) {
-            return end();
-        }
-
-        uint8_t vec_idx;
-        if (!node->internal_bitmap.exists(vec_idx, suffix)) {
-            return end();
-        }
-
-        return Iterator<P, T>{*node, prefix};
-    }
-
     /// Match longest prefix.
     std::optional<std::pair<uint8_t, T>> match_longest(Bits<P> prefix) const noexcept {
         detail::Node* node = &roots_.root(prefix);
@@ -983,35 +1000,6 @@ public:
         }
 
         return longest;
-    }
-
-    /// Counterpart of `match_longest` which returns an iterator.
-    /// \throw std::bad_alloc
-    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0>>* = nullptr>
-    Iterator<P, T> find_longest(Bits<P> prefix) const noexcept(false) {
-        auto suffix = prefix;
-        detail::Node* node = &roots_.root(suffix);
-
-        std::optional<std::pair<uint8_t, detail::Node>> longest;
-        uint8_t offset = Iar::len;
-        auto const update_longest = [&longest, &offset](auto node, auto slice) {
-            uint8_t vec_idx;
-            if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
-                longest = std::pair{static_cast<uint8_t>(offset + len.value()), node};
-            }
-            offset += detail::stride;
-        };
-
-        find_leaf_branch(node, suffix, update_longest);
-        if (suffix.len() < detail::stride) {
-            update_longest(*node, suffix);
-        }
-
-        if (longest) {
-            return Iterator<P, T>{longest->second, prefix.sub(0, longest->first)};
-        } else {
-            return end();
-        }
     }
 
     /// Erase exact prefix.
@@ -1075,14 +1063,18 @@ public:
         return alloc_;
     }
 
-    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0>>* = nullptr>
-    Iterator<P, T> begin() const noexcept(false) {
-        return Iterator<P, T>{roots_.root(Bits<P>{}), Bits<P>{0, 0}};
-    }
+    /// View to sub networks of `prefix`
+    /// \throw std::bad_alloc
+    ByeTrieSubs<P, T> subs(Bits<P> prefix) const noexcept(false) {
+        auto suffix = prefix;
+        detail::Node* node = &roots_.root(suffix);
 
-    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0>>* = nullptr>
-    Iterator<P, T> end() const noexcept(false) {
-        return Iterator<P, T>{{}, {}};
+        find_leaf_branch(node, suffix, noop);
+        if (suffix.len() > detail::stride_m_1) {
+            return ByeTrieSubs<P, T>{{}, prefix};
+        }
+
+        return ByeTrieSubs<P, T>{*node, prefix};
     }
 
 private:

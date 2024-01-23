@@ -576,39 +576,43 @@ TEST_CASE("Exception guarantee", "[ByeTrie][insert]") {
     }
 }
 
-TEST_CASE("Iteration", "[ByeTrie]") {
+TEST_CASE("", "[ByeTrie][ByeTrieSubsIterator]") {
     using ByeTrie = ByeTrie<uint32_t, long>;
-    using Value = ByeTrie::ValueType;
+    using Value = ByeTrieSubs<uint32_t, long>::ValueType;
     ByeTrie trie;
 
     SECTION("0/0 exists, begin() doesn't seek the first prefix") {
         trie.insert(Bits{0u, 0}, 1);
-        REQUIRE((*trie.begin() == Value{Bits{0u, 0}, 1}));
+        REQUIRE((*trie.subs(Bits{0u, 0}).begin() == Value{Bits{0u, 0}, 1}));
     }
 
     SECTION("0/0 doesn't exist, begin() seeks the first prefix") {
         trie.insert(Bits{0u, 1}, 1);
-        REQUIRE((*trie.begin() == Value{Bits{0u, 1}, 1}));
+        REQUIRE((*trie.subs(Bits{0u, 0}).begin() == Value{Bits{0u, 1}, 1}));
     }
 
     SECTION("empty ByeTrie, begin() == end()") {
-        REQUIRE((trie.begin() == trie.end()));
+        auto const subs = trie.subs(Bits{0u, 0});
+        REQUIRE(subs.begin() == subs.end());
     }
 
     SECTION("not empty, begin() != end()") {
         trie.insert(Bits{0u, 1}, 1);
-        REQUIRE((trie.begin() != trie.end()));
+        auto const subs = trie.subs(Bits{0u, 0});
+        REQUIRE(subs.begin() != subs.end());
     }
 
     SECTION("increment reaches next element") {
         trie.insert(Bits{0u, 0}, 1);
         trie.insert(Bits{0u, 1}, 2);
-        REQUIRE((*++trie.begin() == Value{Bits{0u, 1}, 2}));
+        auto const subs = trie.subs(Bits{0u, 0});
+        REQUIRE((*++subs.begin() == Value{Bits{0u, 1}, 2}));
     }
 
     SECTION("increment reaches end") {
         trie.insert(Bits{0u, 0}, 1);
-        REQUIRE(++trie.begin() == trie.end());
+        auto const subs = trie.subs(Bits{0u, 0});
+        REQUIRE(++subs.begin() == subs.end());
     }
 
     SECTION("iterate within node") {
@@ -617,7 +621,8 @@ TEST_CASE("Iteration", "[ByeTrie]") {
         trie.insert(Bits{0u, 3}, 3);
         trie.insert(Bits{0u, 4}, 4);
         std::vector<Value> values;
-        for (auto const x : trie) {
+        auto const subs = trie.subs(Bits{0u, 0});
+        for (auto const x : subs) {
             values.push_back(x);
         }
         std::vector<Value> const expected{Value{Bits{0u, 1}, 1},
@@ -630,15 +635,17 @@ TEST_CASE("Iteration", "[ByeTrie]") {
     SECTION("node does not have prefixes, but the next node has") {
         trie.insert(Bits{0u, 5}, 1);
         trie.insert(Bits{0u, 6}, 2);
-        REQUIRE((*trie.begin() == Value{Bits{0u, 5}, 1}));
-        REQUIRE((*++trie.begin() == Value{Bits{0u, 6}, 2}));
-        REQUIRE((++ ++trie.begin() == trie.end()));
+        auto const subs = trie.subs(Bits{0u, 0});
+        REQUIRE((*subs.begin() == Value{Bits{0u, 5}, 1}));
+        REQUIRE((*++subs.begin() == Value{Bits{0u, 6}, 2}));
+        REQUIRE((++ ++subs.begin() == subs.end()));
     }
 
     SECTION("iterator comparison") {
         trie.insert(Bits{0xfffffff0u, 32}, 1);
         trie.insert(Bits{0xfffffff1u, 32}, 2);
-        REQUIRE(++trie.begin() == ++trie.begin());
+        auto const subs = trie.subs(Bits{0u, 0});
+        REQUIRE(++subs.begin() == ++subs.begin());
     }
 
     SECTION("iterate a subnet") {
@@ -646,67 +653,15 @@ TEST_CASE("Iteration", "[ByeTrie]") {
         trie.insert(Bits{0x01ffffffu, 32}, 2);
         trie.insert(Bits{0x03ffffffu, 32}, 3);
         trie.insert(Bits{0x040fffffu, 32}, 4);
-        auto it = trie.find_longest(Bits{0xffffffffu, 32});
+        auto const subs = trie.subs(Bits{0x00ffffffu, 24});
         std::vector<Value> values;
-        while (it != trie.end()) {
-            values.push_back(*it);
-            ++it;
+        for (auto const& x : subs) {
+            values.push_back(x);
         }
         std::vector<Value> const expected{Value{Bits{0x00ffffffu, 24}, 1},
                                           Value{Bits{0x01ffffffu, 32}, 2},
                                           Value{Bits{0x03ffffffu, 32}, 3}};
         REQUIRE(values == expected);
-    }
-}
-
-TEST_CASE("Iterator interface", "[ByeTrie][find_exact][find_longest]") {
-    using ByeTrie = ByeTrie<uint32_t, long>;
-    using Value = ByeTrie::ValueType;
-    ByeTrie trie;
-
-    SECTION("find_exact") {
-        SECTION("empty ByeTrie, find_exact() == end()") {
-            REQUIRE((trie.find_exact(Bits{0u, 0}) == trie.end()));
-        }
-
-        SECTION("not empty, find_exact() != end()") {
-            trie.insert(Bits{0u, 1}, 1);
-            REQUIRE((trie.find_exact(Bits{0u, 1}) != trie.end()));
-        }
-
-        SECTION("match an element") {
-            trie.insert(Bits{0u, 0}, 1);
-            REQUIRE(trie.find_exact(Bits{0u, 0}) == trie.begin());
-            REQUIRE(*trie.find_exact(Bits{0u, 0}) == Value{Bits{0u, 0}, 1});
-        }
-
-        SECTION("don't match an element") {
-            trie.insert(Bits{0u, 0}, 1);
-            REQUIRE(trie.find_exact(Bits{0u, 1}) == trie.end());
-            REQUIRE(trie.find_exact(Bits{0u, 5}) == trie.end());
-        }
-    }
-
-    SECTION("find_longest") {
-        SECTION("empty ByeTrie, find_longest() == end()") {
-            REQUIRE((trie.find_longest(Bits{0u, 0}) == trie.end()));
-        }
-
-        SECTION("not empty, find_longest() != end()") {
-            trie.insert(Bits{0u, 1}, 1);
-            REQUIRE((trie.find_longest(Bits{0u, 2}) != trie.end()));
-        }
-
-        SECTION("find an element") {
-            trie.insert(Bits{1u, 1}, 1);
-            REQUIRE(trie.find_longest(Bits{1u, 2}) == trie.begin());
-            REQUIRE(*trie.find_longest(Bits{1u, 2}) == Value{Bits{1u, 1}, 1});
-        }
-
-        SECTION("don't find an element") {
-            trie.insert(Bits{1u, 1}, 1);
-            REQUIRE(trie.find_longest(Bits{0u, 1}) == trie.end());
-        }
     }
 }
 
@@ -732,9 +687,7 @@ TEST_CASE(
     trie.replace(Bits<Uint128>{0u, 0}, 1);
     trie.match_exact(Bits<Uint128>{0u, 0});
     trie.match_longest(Bits<Uint128>{0u, 0});
-    trie.find_longest(Bits<Uint128>{0u, 0});
-    trie.begin();
-    trie.end();
+    trie.subs(Bits<Uint128>{0u, 0});
 }
 
 TEST_CASE("Initial array optimization", "[ByeTrie][Iar]") {

@@ -56,9 +56,8 @@ TEST_CASE(
         REQUIRE(trie.match_longest(make_network_v4("1.2.3.4/0"))
                 == (std::pair{make_network_v4("1.2.3.4/0"), 0l}));
 
-        REQUIRE(++trie.begin() == trie.end());
-        REQUIRE(trie.find_exact(make_network_v4("0.0.0.0/0")) == trie.begin());
-        REQUIRE(trie.find_longest(make_network_v4("0.0.0.0/0")) == trie.begin());
+        auto const subs = trie.subs(make_network_v4("0.0.0.0/0"));
+        REQUIRE(++subs.begin() == subs.end());
     }
 
     SECTION("ByeTrieV6") {
@@ -70,28 +69,27 @@ TEST_CASE(
         REQUIRE(trie.match_longest(make_network_v6("1::/0"))
                 == (std::pair{make_network_v6("1::/0"), 0l}));
 
-        REQUIRE(++trie.begin() == trie.end());
-        REQUIRE(trie.find_exact(make_network_v6("::/0")) == trie.begin());
-        REQUIRE(trie.find_longest(make_network_v6("::/0")) == trie.begin());
+        auto const subs = trie.subs(make_network_v6("::0/0"));
+        REQUIRE(++subs.begin() == subs.end());
     }
 }
 
 TEST_CASE("Indirect testing of IteratorV4::operator*()", "[white-box]") {
     SECTION("ByeTrieV4") {
         ByeTrieV4<long> trie;
-        using Value = ByeTrieV4<long>::ValueType;
+        using Value = ByeTrieSubsV4<long>::ValueType;
         REQUIRE(trie.insert(make_network_v4("25.0.0.0/8"), 1) == std::nullopt);
 
-        REQUIRE(*trie.find_longest(make_network_v4("25.1.0.0/16"))
+        REQUIRE(*trie.subs(make_network_v4("25.1.0.0/8")).begin()
                 == Value{.prefix = make_network_v4("25.0.0.0/8"), .value = 1});
     }
 
     SECTION("ByeTrieV6") {
         ByeTrieV6<long> trie;
-        using Value = ByeTrieV6<long>::ValueType;
+        using Value = ByeTrieSubsV6<long>::ValueType;
         REQUIRE(trie.insert(make_network_v6("::/0"), 1) == std::nullopt);
 
-        REQUIRE(*trie.find_longest(make_network_v6("::1/128"))
+        REQUIRE(*trie.subs(make_network_v6("::/0")).begin()
                 == Value{.prefix = make_network_v6("::/0"), .value = 1});
     }
 }
