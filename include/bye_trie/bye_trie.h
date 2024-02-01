@@ -1166,6 +1166,8 @@ public:
         return ByeTrieSubs<P, T, N>{*node, prefix};
     }
 
+    /// Visit super networks of `prefix` with `on_super(Bits, T)`
+    /// \throw forwards `on_super` exception
     template <class F>
     void visit_supers(Bits<P> prefix, F const& on_super) const
             noexcept(noexcept(on_super(std::declval<Bits<P>>(), std::declval<T>()))) {
