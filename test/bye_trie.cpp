@@ -74,17 +74,26 @@ TEST_CASE("", "[ExternalBitmap][exists][before]") {
 TEST_CASE("", "[InternalBitmap][set][unset][exists]") {
     uint8_t idx;
 
+    SECTION("7") {
+        detail::InternalBitmap<7> bitmap(
+                0b0000000000000000000000000000000000000000000000000000000000000001'00000000000000000000000000000000'0000000000000000'00000000'0000'00'0);
+        REQUIRE(!bitmap.exists(idx, Bits{3, 6}));
+        bitmap.set(Bits{3, 6});
+        REQUIRE(bitmap.exists(idx, Bits{3, 6}));
+        REQUIRE(idx == 1);
+        bitmap.unset(Bits{3, 6});
+        REQUIRE(!bitmap.exists(idx, Bits{3, 6}));
+    }
+
     SECTION("6") {
         detail::InternalBitmap<6> bitmap(
                 0b00000000000000000000000000000001'0000000000000000'00000000'0000'00'0);
-        SECTION("4 length") {
-            REQUIRE(!bitmap.exists(idx, Bits{14, 5}));
-            bitmap.set(Bits{14, 5});
-            REQUIRE(bitmap.exists(idx, Bits{14, 5}));
-            REQUIRE(idx == 1);
-            bitmap.unset(Bits{14, 5});
-            REQUIRE(!bitmap.exists(idx, Bits{14, 5}));
-        }
+        REQUIRE(!bitmap.exists(idx, Bits{3, 5}));
+        bitmap.set(Bits{3, 5});
+        REQUIRE(bitmap.exists(idx, Bits{3, 5}));
+        REQUIRE(idx == 1);
+        bitmap.unset(Bits{3, 5});
+        REQUIRE(!bitmap.exists(idx, Bits{3, 5}));
     }
 
     SECTION("5") {
