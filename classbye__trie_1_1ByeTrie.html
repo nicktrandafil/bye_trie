@@ -127,6 +127,10 @@ std::optional&lt; std::pair&lt; uint8_t, T &gt; &gt;&#160;</td><td class="memIte
 <tr class="memitem:a4ba63a0b0c608561f46f52d29a3efd9f"><td class="memItemLeft" align="right" valign="top">ByeTrieSubs&lt; P, T, N &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classbye__trie_1_1ByeTrie.html#a4ba63a0b0c608561f46f52d29a3efd9f">subs</a> (Bits&lt; P &gt; prefix) const noexcept(false)</td></tr>
 <tr class="memdesc:a4ba63a0b0c608561f46f52d29a3efd9f"><td class="mdescLeft">&#160;</td><td class="mdescRight">View to sub networks of <code>prefix</code>  <a href="classbye__trie_1_1ByeTrie.html#a4ba63a0b0c608561f46f52d29a3efd9f">More...</a><br /></td></tr>
 <tr class="separator:a4ba63a0b0c608561f46f52d29a3efd9f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a127dd5f1ed535c859068f726631a837a"><td class="memTemplParams" colspan="2">template&lt;class F &gt; </td></tr>
+<tr class="memitem:a127dd5f1ed535c859068f726631a837a"><td class="memTemplItemLeft" align="right" valign="top">void&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="classbye__trie_1_1ByeTrie.html#a127dd5f1ed535c859068f726631a837a">visit_supers</a> (Bits&lt; P &gt; prefix, F const &amp;on_super) const noexcept(noexcept(on_super(std::declval&lt; Bits&lt; P &gt; &gt;(), std::declval&lt; T &gt;())))</td></tr>
+<tr class="memdesc:a127dd5f1ed535c859068f726631a837a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Visit super networks of <code>prefix</code> with <code>on_super(Bits, T)</code>  <a href="classbye__trie_1_1ByeTrie.html#a127dd5f1ed535c859068f726631a837a">More...</a><br /></td></tr>
+<tr class="separator:a127dd5f1ed535c859068f726631a837a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;UnsignedIntegral P, TrivialLittleObject T, Allocator Alloc = SystemAllocator, uint8_t N = 5, class Iar = Iar0&lt;N&gt;&gt;<br />
@@ -286,6 +290,50 @@ class bye_trie::ByeTrie&lt; P, T, Alloc, N, Iar &gt;</div><p >Bits Trie. Trie da
 <dl class="exception"><dt>Exceptions</dt><dd>
   <table class="exception">
     <tr><td class="paramname">std::bad_alloc</td><td></td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a127dd5f1ed535c859068f726631a837a" name="a127dd5f1ed535c859068f726631a837a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a127dd5f1ed535c859068f726631a837a">&#9670;&nbsp;</a></span>visit_supers()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void visit_supers </td>
+          <td>(</td>
+          <td class="paramtype">Bits&lt; P &gt;&#160;</td>
+          <td class="paramname"><em>prefix</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">F const &amp;&#160;</td>
+          <td class="paramname"><em>on_super</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Visit super networks of <code>prefix</code> with <code>on_super(Bits, T)</code> </p>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">forwards</td><td><code>on_super</code> exception </td></tr>
   </table>
   </dd>
 </dl>

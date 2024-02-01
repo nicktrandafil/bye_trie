@@ -1,6 +1,7 @@
 var NAVTREEINDEX0 =
 {
 "classbye__trie_1_1ByeTrie.html":[1,0,0],
+"classbye__trie_1_1ByeTrie.html#a127dd5f1ed535c859068f726631a837a":[1,0,0,6],
 "classbye__trie_1_1ByeTrie.html#a38dbfed768edd77da362d9b53003d2f6":[1,0,0,2],
 "classbye__trie_1_1ByeTrie.html#a4175778ec475feb6a8d998b0ed51404a":[1,0,0,3],
 "classbye__trie_1_1ByeTrie.html#a4ba63a0b0c608561f46f52d29a3efd9f":[1,0,0,5],
