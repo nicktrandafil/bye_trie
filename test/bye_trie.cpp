@@ -744,11 +744,14 @@ TEST_CASE("", "[ByeTrie][visit_supers]") {
     using ByeTrie = ByeTrie<uint32_t, long>;
     ByeTrie trie;
     trie.insert(Bits{0x00'00'00'00u, 0}, 0);
-    trie.insert(Bits{0x01'00'00'00u, 1}, 1);
-    trie.insert(Bits{0x02'00'00'00u, 2}, 2);
-    trie.insert(Bits{0x02'01'00'00u, 10}, 3);
-    std::vector<Value> actual, expected;
-    trie.visit_supers(Bits{0x02'01'00'00u, 10},
+    trie.insert(Bits{0x00'00'00'01u, 1}, 1);
+    trie.insert(Bits{0x00'00'00'02u, 2}, 2);
+    trie.insert(Bits{0x00'00'01'02u, 10}, 3);
+    trie.insert(Bits{0x00'00'02'02u, 10}, 4);
+    std::vector<Value> actual, expected{Value{Bits{0x00'00'00'00u, 0}, 0},
+                                        Value{Bits{0x00'00'00'02u, 2}, 2},
+                                        Value{Bits{0x00'00'01'02u, 10}, 3}};
+    trie.visit_supers(Bits{0x00'00'01'02u, 10},
                       [&actual](auto p, auto v) { actual.emplace_back(p, v); });
     REQUIRE(actual == expected);
 }
