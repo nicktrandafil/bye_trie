@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Type" content="text/xhtml;charset=UTF-8"/>
 <meta http-equiv="X-UA-Compatible" content="IE=9"/>
 <meta name="generator" content="Doxygen 1.9.4"/>
-<title>bye_trie: RecyclingStack Class Reference</title>
+<title>bye_trie: RecyclingStack&lt; N &gt; Class Template Reference</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
@@ -95,17 +95,19 @@ $(document).ready(function(){initNavTree('classbye__trie_1_1detail_1_1RecyclingS
 <div class="header">
   <div class="summary">
 <a href="classbye__trie_1_1detail_1_1RecyclingStack-members.html">List of all members</a>  </div>
-  <div class="headertitle"><div class="title">RecyclingStack Class Reference</div></div>
+  <div class="headertitle"><div class="title">RecyclingStack&lt; N &gt; Class Template Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>Stack of <code>Node</code>s. The stack has preallocated memory to to hold 32 <code>Node</code>s. It can recycle memory to hold more <code>Node</code>s.  
+<p>Stack of <code>Node</code>s. The stack has preallocated memory to to hold <code>Stride::index_count</code> <code>Node</code>s. It can recycle memory to hold more <code>Node</code>s.  
  <a href="classbye__trie_1_1detail_1_1RecyclingStack.html#details">More...</a></p>
 
 <p><code>#include &lt;bye_trie/bye_trie.h&gt;</code></p>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
-<div class="textblock"><p >Stack of <code>Node</code>s. The stack has preallocated memory to to hold 32 <code>Node</code>s. It can recycle memory to hold more <code>Node</code>s. </p>
-<dl class="section note"><dt>Note</dt><dd>During trie destruction this stack is used to traverse the trie without allocating additional memory but rather reusing the memory being freed during the destruction. One can mathematically prove that this stack won't go out of memory in the algorithm. </dd></dl>
+<div class="textblock"><div class="compoundTemplParams">template&lt;uint8_t N&gt;<br />
+class bye_trie::detail::RecyclingStack&lt; N &gt;</div><p >Stack of <code>Node</code>s. The stack has preallocated memory to to hold <code>Stride::index_count</code> <code>Node</code>s. It can recycle memory to hold more <code>Node</code>s. </p>
+<dl class="section note"><dt>Note</dt><dd>During trie destruction this stack is used to traverse the trie without allocating additional memory but rather reusing the memory being freed during the destruction. One can mathematically prove that this stack won't go out of memory in the algorithm.</dd></dl>
+<p>The first element of contiguous array of 16 byte items store meta, the rest store usable data, thus the resident array has size <code>Stride::index_count</code> + 1. </p>
 </div><hr/>The documentation for this class was generated from the following file:<ul>
 <li>bye_trie/bye_trie.h</li>
 </ul>

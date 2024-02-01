@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Type" content="text/xhtml;charset=UTF-8"/>
 <meta http-equiv="X-UA-Compatible" content="IE=9"/>
 <meta name="generator" content="Doxygen 1.9.4"/>
-<title>bye_trie: ByeTrie&lt; P, T, Alloc, Iar &gt; Class Template Reference</title>
+<title>bye_trie: ByeTrie&lt; P, T, Alloc, N, Iar &gt; Class Template Reference</title>
 <link href="tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="jquery.js"></script>
 <script type="text/javascript" src="dynsections.js"></script>
@@ -96,7 +96,7 @@ $(document).ready(function(){initNavTree('classbye__trie_1_1ByeTrie.html',''); i
   <div class="summary">
 <a href="#pub-methods">Public Member Functions</a> &#124;
 <a href="classbye__trie_1_1ByeTrie-members.html">List of all members</a>  </div>
-  <div class="headertitle"><div class="title">ByeTrie&lt; P, T, Alloc, Iar &gt; Class Template Reference<div class="ingroups"><a class="el" href="group__group-datatypes.html">Data types</a></div></div></div>
+  <div class="headertitle"><div class="title">ByeTrie&lt; P, T, Alloc, N, Iar &gt; Class Template Reference<div class="ingroups"><a class="el" href="group__group-datatypes.html">Data types</a></div></div></div>
 </div><!--header-->
 <div class="contents">
 
@@ -124,13 +124,13 @@ std::optional&lt; std::pair&lt; uint8_t, T &gt; &gt;&#160;</td><td class="memIte
 <tr class="memitem:acc544af93122d4374ec79d6fe127436d"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classbye__trie_1_1ByeTrie.html#acc544af93122d4374ec79d6fe127436d">erase_exact</a> (Bits&lt; P &gt; prefix) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0)))</td></tr>
 <tr class="memdesc:acc544af93122d4374ec79d6fe127436d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Erase exact prefix.  <a href="classbye__trie_1_1ByeTrie.html#acc544af93122d4374ec79d6fe127436d">More...</a><br /></td></tr>
 <tr class="separator:acc544af93122d4374ec79d6fe127436d"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a506c7c6249a90063f48003fc83c43b04"><td class="memItemLeft" align="right" valign="top">ByeTrieSubs&lt; P, T &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classbye__trie_1_1ByeTrie.html#a506c7c6249a90063f48003fc83c43b04">subs</a> (Bits&lt; P &gt; prefix) const noexcept(false)</td></tr>
-<tr class="memdesc:a506c7c6249a90063f48003fc83c43b04"><td class="mdescLeft">&#160;</td><td class="mdescRight">View to sub networks of <code>prefix</code>  <a href="classbye__trie_1_1ByeTrie.html#a506c7c6249a90063f48003fc83c43b04">More...</a><br /></td></tr>
-<tr class="separator:a506c7c6249a90063f48003fc83c43b04"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a4ba63a0b0c608561f46f52d29a3efd9f"><td class="memItemLeft" align="right" valign="top">ByeTrieSubs&lt; P, T, N &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classbye__trie_1_1ByeTrie.html#a4ba63a0b0c608561f46f52d29a3efd9f">subs</a> (Bits&lt; P &gt; prefix) const noexcept(false)</td></tr>
+<tr class="memdesc:a4ba63a0b0c608561f46f52d29a3efd9f"><td class="mdescLeft">&#160;</td><td class="mdescRight">View to sub networks of <code>prefix</code>  <a href="classbye__trie_1_1ByeTrie.html#a4ba63a0b0c608561f46f52d29a3efd9f">More...</a><br /></td></tr>
+<tr class="separator:a4ba63a0b0c608561f46f52d29a3efd9f"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
-<div class="textblock"><div class="compoundTemplParams">template&lt;UnsignedIntegral P, TrivialLittleObject T, Allocator Alloc = SystemAllocator, class Iar = Iar0&gt;<br />
-class bye_trie::ByeTrie&lt; P, T, Alloc, Iar &gt;</div><p >Bits Trie. Trie data structure with alphabet of just 0 and 1. </p>
+<div class="textblock"><div class="compoundTemplParams">template&lt;UnsignedIntegral P, TrivialLittleObject T, Allocator Alloc = SystemAllocator, uint8_t N = 5, class Iar = Iar0&lt;N&gt;&gt;<br />
+class bye_trie::ByeTrie&lt; P, T, Alloc, N, Iar &gt;</div><p >Bits Trie. Trie data structure with alphabet of just 0 and 1. </p>
 </div><h2 class="groupheader">Member Function Documentation</h2>
 <a id="a646d86004dd42a7579371ac657acd814" name="a646d86004dd42a7579371ac657acd814"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a646d86004dd42a7579371ac657acd814">&#9670;&nbsp;</a></span>insert()</h2>
@@ -258,8 +258,8 @@ class bye_trie::ByeTrie&lt; P, T, Alloc, Iar &gt;</div><p >Bits Trie. Trie data 
 
 </div>
 </div>
-<a id="a506c7c6249a90063f48003fc83c43b04" name="a506c7c6249a90063f48003fc83c43b04"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a506c7c6249a90063f48003fc83c43b04">&#9670;&nbsp;</a></span>subs()</h2>
+<a id="a4ba63a0b0c608561f46f52d29a3efd9f" name="a4ba63a0b0c608561f46f52d29a3efd9f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4ba63a0b0c608561f46f52d29a3efd9f">&#9670;&nbsp;</a></span>subs()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -268,7 +268,7 @@ class bye_trie::ByeTrie&lt; P, T, Alloc, Iar &gt;</div><p >Bits Trie. Trie data 
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">ByeTrieSubs&lt; P, T &gt; subs </td>
+          <td class="memname">ByeTrieSubs&lt; P, T, N &gt; subs </td>
           <td>(</td>
           <td class="paramtype">Bits&lt; P &gt;&#160;</td>
           <td class="paramname"><em>prefix</em></td><td>)</td>
