@@ -207,10 +207,20 @@ public:
         return std::pair{IpNetType{prefix.address(), prefix_length}, value};
     }
 
+    /// View to sub networks of `prefix`
     auto subs(IpNetTypeCopyOptimized prefix) const noexcept(false) {
         return IpNetByeTrieSubs<IpNetType, IntType, T>{Base::subs(
                 Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
                      static_cast<uint8_t>(prefix.prefix_length())})};
+    }
+
+    std::vector<Value<IpNetType, T>> supers(IpNetTypeCopyOptimized prefix) const noexcept(false) {
+        std::vector<Value<IpNetType, T>> ret;
+        ret.reserve(sizeof(IntType) * CHAR_BIT);
+        visit_supers(prefix,
+                     [&ret](auto prefix, auto v) { ret.emplace_back(prefix, v); });
+        std::reverse(begin(ret), end(ret));
+        return ret;
     }
 
     template <class F>
