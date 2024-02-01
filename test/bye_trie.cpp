@@ -639,9 +639,10 @@ TEST_CASE("Exception guarantee", "[ByeTrie][insert]") {
     }
 }
 
-TEST_CASE("", "[ByeTrie][ByeTrieSubsIterator]") {
-    using ByeTrie = ByeTrie<uint32_t, long>;
-    using Value = ByeTrieSubs<uint32_t, long>::ValueType;
+TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][ByeTrieSubsIterator]", Ns) {
+    using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, TestType{}>;
+    using Value = ByeTrieSubs<uint32_t, long, TestType{}>::ValueType;
+
     ByeTrie trie;
 
     SECTION("0/0 exists, begin() doesn't seek the first prefix") {

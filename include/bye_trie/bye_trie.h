@@ -65,6 +65,8 @@ concept UnsignedIntegral = std::unsigned_integral<T>
 
 template <UnsignedIntegral T>
 class Bits {
+    static constexpr auto int_bit_count = sizeof(T) * CHAR_BIT;
+
 public:
     constexpr Bits()
             : bits_{}
@@ -74,7 +76,7 @@ public:
     constexpr Bits(T bits, uint8_t len) noexcept
             : bits_(bits)
             , len_(len) {
-        assert(len <= sizeof(T) * CHAR_BIT);
+        assert(len <= int_bit_count);
     }
 
     constexpr uint8_t len() const noexcept {
@@ -86,17 +88,17 @@ public:
     }
 
     constexpr T value() const noexcept {
-        assert(len_ <= sizeof(T) * CHAR_BIT);
-        return (len_ == sizeof(T) * CHAR_BIT) ? bits_ : (bits_ & ((T(1) << len_) - 1));
+        assert(len_ <= int_bit_count);
+        return (len_ == int_bit_count) ? bits_ : (bits_ & ((T(1) << len_) - 1));
     }
 
     Bits suffix(uint8_t offset) const noexcept {
-        assert(offset < sizeof(T) * CHAR_BIT);
+        assert(offset < int_bit_count);
         return Bits{bits_ >> offset, static_cast<uint8_t>(len_ - offset)};
     }
 
     Bits prefix(uint8_t len) const noexcept {
-        assert(len < sizeof(T) * CHAR_BIT);
+        assert(len < int_bit_count);
         return Bits{(bits_ & ((T(1) << len) - 1)), len};
     }
 
@@ -106,9 +108,8 @@ public:
     }
 
     Bits concatenated(Bits slice) const noexcept {
-        assert(len_ != sizeof(T) * CHAR_BIT);
-        assert(static_cast<uint8_t>(len_ + slice.len()) <= sizeof(T) * CHAR_BIT);
-        return Bits{bits_ | (slice.value() << len_),
+        assert(static_cast<uint8_t>(len_ + slice.len()) <= int_bit_count);
+        return Bits{bits_ | ((len_ == int_bit_count) ? 0 : (slice.value() << len_)),
                     static_cast<uint8_t>(len_ + slice.len())};
     }
 
@@ -848,7 +849,8 @@ public:
                 node = path.back().node;
                 prefix = path.back().prefix;
                 fixed_bits = path.back().fixed_bits;
-                value_iter_bits = Bits<P>(0, detail::Stride<N>::bits_count - fixed_bits.len());
+                value_iter_bits =
+                        Bits<P>(0, detail::Stride<N>::bits_count - fixed_bits.len());
                 child_iter_bits = path.back().child_iter_bits;
                 ++child_iter_bits;
                 path.pop_back();
@@ -880,7 +882,8 @@ private:
                 prefix.split_at(detail::leaf_pos<N>(prefix));
         assert(fixed_bits.len() < detail::Stride<N>::bits_count);
         this->value_iter_bits = Bits<P>(0, 0);
-        this->child_iter_bits = Bits<P>(0, detail::Stride<N>::bits_count - this->fixed_bits.len());
+        this->child_iter_bits =
+                Bits<P>(0, detail::Stride<N>::bits_count - this->fixed_bits.len());
         uint8_t vec_idx;
         auto const slice = fixed_bits.concatenated(value_iter_bits);
         if (!node.internal_bitmap.exists(vec_idx, slice)) {
@@ -1156,7 +1159,7 @@ public:
         detail::Node<N>* node = &roots_.root(suffix);
 
         find_leaf_branch(node, suffix, noop);
-        if (suffix.len() > detail::Stride<4>::bits_count) {
+        if (suffix.len() > detail::Stride<N - 1>::bits_count) {
             return ByeTrieSubs<P, T, N>{{}, prefix};
         }
 
