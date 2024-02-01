@@ -1174,14 +1174,16 @@ public:
 
         uint8_t offset = Iar::len;
         auto const visit = [&offset, prefix, &on_super](auto node, auto slice) {
-            uint8_t vec_idx = 0;
-            if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
-                on_super(prefix.sub(0, offset + len.value()),
-                         std::bit_cast<T>(
-                                 detail::NodeVec{node.children,
-                                                 node.external_bitmap.total(),
-                                                 static_cast<uint8_t>(vec_idx + 1)}
-                                         .value(vec_idx)));
+            for (auto len = 0u; len <= slice.len(); ++len) {
+                uint8_t vec_idx = 0;
+                if (node.internal_bitmap.exists(vec_idx, slice.prefix(len))) {
+                    on_super(prefix.sub(0, offset + len),
+                             std::bit_cast<T>(
+                                     detail::NodeVec{node.children,
+                                                     node.external_bitmap.total(),
+                                                     static_cast<uint8_t>(vec_idx + 1)}
+                                             .value(vec_idx)));
+                }
             }
             offset += detail::Stride<N>::bits_count;
         };
