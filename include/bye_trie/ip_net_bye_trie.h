@@ -212,6 +212,24 @@ public:
                 Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
                      static_cast<uint8_t>(prefix.prefix_length())})};
     }
+
+    template <class F>
+    void visit_supers(IpNetTypeCopyOptimized prefix, F const& on_super) const
+            noexcept(false) {
+        using AddressType = decltype(std::declval<IpNetType>().address());
+        using BytesType = typename AddressType::bytes_type;
+        Base::visit_supers(
+                Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
+                     static_cast<uint8_t>(prefix.prefix_length())},
+                [on_super](auto prefix, auto v) {
+                    on_super(IpNetType(AddressType(std::bit_cast<BytesType>(
+                                               detail::reverse_bits_of_bytes(
+                                                       std::bit_cast<BytesType>(
+                                                               prefix.bits())))),
+                                       prefix.len()),
+                             v);
+                });
+    }
 };
 
 template <class T>

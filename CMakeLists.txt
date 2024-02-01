@@ -80,6 +80,7 @@ if(${PROJECT_NAME}_TESTS)
     endif()
     set(sources
         test/bye_trie.cpp
+        test/pair.h
         test/stress_test.cpp
     )
     if(${PROJECT_NAME}_BOOST_IP)
