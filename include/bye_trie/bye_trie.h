@@ -773,20 +773,26 @@ concept Allocator = std::is_nothrow_move_constructible_v<T>
                         noexcept(alloc.dealloc(MemBlk{}));
                     };
 
+template <class T1, class T2>
+struct Value {
+    bool operator==(Value const& rhs) const noexcept = default;
+
+    friend std::ostream& operator<<(std::ostream& os, Value const& x) {
+        return os << "Value{" << x.prefix << ", " << x.value << "}";
+    }
+
+    T1 prefix;
+    T2 value;
+};
+
+template <class T1, class T2>
+Value(T1, T2) -> Value<T1, T2>;
+
 template <UnsignedIntegral P, TrivialLittleObject T, uint8_t N>
 class SubsIterator {
 public:
     using iterator_category = std::input_iterator_tag;
-    using value_type = struct value_type {
-        bool operator==(value_type const& rhs) const noexcept = default;
-
-        friend std::ostream& operator<<(std::ostream& os, value_type const& x) {
-            return os << "Value{" << x.prefix << ", " << x.value << "}";
-        }
-
-        Bits<P> prefix;
-        T value;
-    };
+    using value_type = Value<Bits<P>, T>;
     using difference_type = std::ptrdiff_t;
     using pointer = value_type const*;
     using reference = value_type;

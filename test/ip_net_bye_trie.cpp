@@ -24,8 +24,6 @@
 
 #include "bye_trie/ip_net_bye_trie.h"
 
-#include "pair.h"
-
 #include <catch2/catch_all.hpp>
 
 using namespace bye_trie;
@@ -104,7 +102,7 @@ TEST_CASE("Visit super nets", "") {
         trie.insert(make_network_v4("25.2.0.0/16"), 3);
         trie.insert(make_network_v4("25.1.2.0/24"), 4);
 
-        std::vector<Pair<boost::asio::ip::network_v4, long>> actual,
+        std::vector<Value<boost::asio::ip::network_v4, long>> actual,
                 expected{{make_network_v4("25.0.0.0/8"), 1},
                          {make_network_v4("25.1.0.0/16"), 2},
                          {make_network_v4("25.1.2.0/24"), 4}};
@@ -113,6 +111,10 @@ TEST_CASE("Visit super nets", "") {
                           [&](auto p, auto v) { actual.emplace_back(p, v); });
 
         REQUIRE(expected == actual);
+
+        std::reverse(expected.begin(), expected.end());
+
+        REQUIRE(expected == trie.supers(make_network_v4("25.1.2.0/24")));
     }
 
     SECTION("ByeTrieV6") {
@@ -122,7 +124,7 @@ TEST_CASE("Visit super nets", "") {
         trie.insert(make_network_v6("::2:0:0:0/80"), 3);
         trie.insert(make_network_v6("::1:2:0:0/96"), 4);
 
-        std::vector<Pair<boost::asio::ip::network_v6, long>> actual,
+        std::vector<Value<boost::asio::ip::network_v6, long>> actual,
                 expected{{make_network_v6("::/0"), 1},
                          {make_network_v6("::1:0:0:0/80"), 2},
                          {make_network_v6("::1:2:0:0/96"), 4}};
@@ -131,5 +133,9 @@ TEST_CASE("Visit super nets", "") {
                           [&](auto p, auto v) { actual.emplace_back(p, v); });
 
         REQUIRE(expected == actual);
+
+        std::reverse(expected.begin(), expected.end());
+
+        REQUIRE(expected == trie.supers(make_network_v6("::1:2:0:0/96")));
     }
 }

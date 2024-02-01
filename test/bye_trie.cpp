@@ -25,7 +25,6 @@
 #include "bye_trie/bye_trie.h"
 
 #include "bye_trie/uint128.h"
-#include "pair.h"
 
 #include <catch2/catch_all.hpp>
 
@@ -738,9 +737,9 @@ TEST_CASE("", "[ByeTrie][visit_supers]") {
     trie.insert(Bits{0x00'00'00'02u, 2}, 2);
     trie.insert(Bits{0x00'00'01'02u, 10}, 3);
     trie.insert(Bits{0x00'00'02'02u, 10}, 4);
-    std::vector expected{Pair{Bits{0x00'00'00'00u, 0}, 0},
-                         Pair{Bits{0x00'00'00'02u, 2}, 2},
-                         Pair{Bits{0x00'00'01'02u, 10}, 3}};
+    std::vector expected{Value{Bits{0x00'00'00'00u, 0}, 0},
+                         Value{Bits{0x00'00'00'02u, 2}, 2},
+                         Value{Bits{0x00'00'01'02u, 10}, 3}};
     decltype(expected) actual;
     trie.visit_supers(Bits{0x00'00'01'02u, 10},
                       [&actual](auto p, auto v) { actual.emplace_back(p, v); });
