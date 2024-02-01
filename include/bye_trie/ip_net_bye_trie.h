@@ -89,7 +89,7 @@ inline Uint128 reverse_bits_of_bytes(
 
 template <class PrefixType, UnsignedIntegral IntType, TrivialLittleObject T>
 class IpNetSubsIterator {
-    using Inner = SubsIterator<IntType, T>;
+    using Inner = SubsIterator<IntType, T, 5>;
 
 public:
     explicit IpNetSubsIterator(Inner&& x) noexcept(false)
@@ -161,7 +161,7 @@ private:
 
 template <class IpNetType, UnsignedIntegral IntType, class T, class Allocator>
 class IpNetByeTrie : private ByeTrie<IntType, T, Allocator> {
-    using Base = ByeTrie<IntType, T, Allocator>;
+    using Base = ByeTrie<IntType, T, Allocator, 5>;
 
     using IpNetTypeCopyOptimized =
             std::conditional_t<sizeof(IpNetType) <= 16, IpNetType, IpNetType const&>;
