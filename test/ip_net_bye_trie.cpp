@@ -24,6 +24,8 @@
 
 #include "bye_trie/ip_net_bye_trie.h"
 
+#include "pair.h"
+
 #include <catch2/catch_all.hpp>
 
 using namespace bye_trie;
@@ -91,5 +93,43 @@ TEST_CASE("Indirect testing of IteratorV4::operator*()", "[white-box]") {
 
         REQUIRE(*trie.subs(make_network_v6("::/0")).begin()
                 == Value{.prefix = make_network_v6("::/0"), .value = 1});
+    }
+}
+
+TEST_CASE("Visit super nets", "") {
+    SECTION("ByeTrieV4") {
+        ByeTrieV4<long> trie;
+        trie.insert(make_network_v4("25.0.0.0/8"), 1);
+        trie.insert(make_network_v4("25.1.0.0/16"), 2);
+        trie.insert(make_network_v4("25.2.0.0/16"), 3);
+        trie.insert(make_network_v4("25.1.2.0/24"), 4);
+
+        std::vector<Pair<boost::asio::ip::network_v4, long>> actual,
+                expected{{make_network_v4("25.0.0.0/8"), 1},
+                         {make_network_v4("25.1.0.0/16"), 2},
+                         {make_network_v4("25.1.2.0/24"), 4}};
+
+        trie.visit_supers(make_network_v4("25.1.2.0/24"),
+                          [&](auto p, auto v) { actual.emplace_back(p, v); });
+
+        REQUIRE(expected == actual);
+    }
+
+    SECTION("ByeTrieV6") {
+        ByeTrieV6<long> trie;
+        trie.insert(make_network_v6("::/0"), 1);
+        trie.insert(make_network_v6("::1:0:0:0/80"), 2);
+        trie.insert(make_network_v6("::2:0:0:0/80"), 3);
+        trie.insert(make_network_v6("::1:2:0:0/96"), 4);
+
+        std::vector<Pair<boost::asio::ip::network_v6, long>> actual,
+                expected{{make_network_v6("::/0"), 1},
+                         {make_network_v6("::1:0:0:0/80"), 2},
+                         {make_network_v6("::1:2:0:0/96"), 4}};
+
+        trie.visit_supers(make_network_v6("::1:2:0:0/96"),
+                          [&](auto p, auto v) { actual.emplace_back(p, v); });
+
+        REQUIRE(expected == actual);
     }
 }

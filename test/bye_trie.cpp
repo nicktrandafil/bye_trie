@@ -25,6 +25,7 @@
 #include "bye_trie/bye_trie.h"
 
 #include "bye_trie/uint128.h"
+#include "pair.h"
 
 #include <catch2/catch_all.hpp>
 
@@ -729,17 +730,6 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][ByeTrieSubsIterator]", Ns) {
     }
 }
 
-struct Value {
-    bool operator==(Value const& rhs) const noexcept = default;
-
-    friend std::ostream& operator<<(std::ostream& os, Value const& x) {
-        return os << "Value{" << x.prefix << ", " << x.value << "}";
-    }
-
-    Bits<unsigned> prefix;
-    unsigned value;
-};
-
 TEST_CASE("", "[ByeTrie][visit_supers]") {
     using ByeTrie = ByeTrie<uint32_t, long>;
     ByeTrie trie;
@@ -748,9 +738,10 @@ TEST_CASE("", "[ByeTrie][visit_supers]") {
     trie.insert(Bits{0x00'00'00'02u, 2}, 2);
     trie.insert(Bits{0x00'00'01'02u, 10}, 3);
     trie.insert(Bits{0x00'00'02'02u, 10}, 4);
-    std::vector<Value> actual, expected{Value{Bits{0x00'00'00'00u, 0}, 0},
-                                        Value{Bits{0x00'00'00'02u, 2}, 2},
-                                        Value{Bits{0x00'00'01'02u, 10}, 3}};
+    std::vector expected{Pair{Bits{0x00'00'00'00u, 0}, 0},
+                         Pair{Bits{0x00'00'00'02u, 2}, 2},
+                         Pair{Bits{0x00'00'01'02u, 10}, 3}};
+    decltype(expected) actual;
     trie.visit_supers(Bits{0x00'00'01'02u, 10},
                       [&actual](auto p, auto v) { actual.emplace_back(p, v); });
     REQUIRE(actual == expected);
