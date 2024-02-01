@@ -40,4 +40,7 @@ struct Pair {
     T2 second;
 };
 
+template <class T1, class T2>
+Pair(T1, T2) -> Pair<T1, T2>;
+
 } // namespace bye_trie
