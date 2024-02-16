@@ -22,7 +22,9 @@
   SOFTWARE.
 */
 
-#include "bye_trie/bye_trie.h"
+#include "common.h"
+
+#include <bye_trie/bye_trie.h>
 
 #include <chrono>
 #include <iomanip>
@@ -38,11 +40,6 @@ using std::uniform_int_distribution;
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 using std::chrono::seconds;
-
-template <class T>
-static inline __attribute__((always_inline)) void do_not_optimize(T&& value) noexcept {
-    asm volatile("" : "+m"(value) : : "memory");
-}
 
 int main() {
     ByeTrie<uint32_t, long, SystemAllocator, 5, Iar16<5>> trie;
