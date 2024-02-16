@@ -22,7 +22,9 @@
   SOFTWARE.
 */
 
-#include "bye_trie/ip_net_bye_trie.h"
+#include "common.h"
+
+#include <bye_trie/ip_net_bye_trie.h>
 
 #include <chrono>
 #include <fstream>
@@ -44,11 +46,6 @@ static uint16_t parse_int(std::string_view view) {
     return result;
 }
 
-template <class T>
-static inline __attribute__((always_inline)) void do_not_optimize(T&& value) noexcept {
-    asm volatile("" : "+m"(value) : : "memory");
-}
-
 std::pair<network_v4, uint16_t> parse_network_and_asn(std::string_view line) {
     auto const view = std::string_view{line};
     auto const addr_end = view.find(',');
@@ -61,16 +58,6 @@ std::pair<network_v4, uint16_t> parse_network_and_asn(std::string_view line) {
     auto const network = make_network_v4(addr, len);
 
     return {network, asn};
-}
-
-std::chrono::nanoseconds benchmark(std::invocable auto&& f) {
-    auto const start = std::chrono::steady_clock::now();
-    f();
-    return std::chrono::steady_clock::now() - start;
-}
-
-std::chrono::nanoseconds per_network(std::chrono::nanoseconds dur, size_t n) {
-    return dur / n;
 }
 
 } // namespace

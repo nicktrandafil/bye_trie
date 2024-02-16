@@ -39,6 +39,7 @@
 #include <ostream>
 #include <span>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 static_assert(sizeof(void*) == 8, "64-bit only");
@@ -376,18 +377,18 @@ bool exists_select(uint8_t& values_before,
     return exists_algo<N>(values_before, inner, bits);
 }
 
-template <>
-inline bool exists_select<3>(uint8_t& values_before,
-                             BitmapIndexType<3> inner,
-                             Stride<2> bits) noexcept {
-    assert([&] {
-        uint8_t v1 = 0;
-        uint8_t v2 = 0;
-        return exists_algo<3>(v1, inner, bits) == exists_ht<3>(v2, inner, bits)
-            && v1 == v2;
-    }());
-    return exists_ht<3>(values_before, inner, bits);
-}
+// template <>
+// inline bool exists_select<3>(uint8_t& values_before,
+//                              BitmapIndexType<3> inner,
+//                              Stride<2> bits) noexcept {
+//     assert([&] {
+//         uint8_t v1 = 0;
+//         uint8_t v2 = 0;
+//         return exists_algo<3>(v1, inner, bits) == exists_ht<3>(v2, inner, bits)
+//             && v1 == v2;
+//     }());
+//     return exists_ht<3>(values_before, inner, bits);
+// }
 
 // 0|0000000000000000|00000000|0000|00|0
 //                 16        8    4  2 1
@@ -1027,11 +1028,11 @@ private:
 template <uint8_t N>
 class Iar16 {
 public:
-    static constexpr uint8_t len = 16;
+    static constexpr uint8_t iar_size = 16;
 
     detail::Node<N>& root(auto& prefix) noexcept {
-        assert(prefix.len() >= len);
-        auto [p, s] = prefix.split_at(len);
+        assert(prefix.len() >= iar_size);
+        auto [p, s] = prefix.split_at(iar_size);
         prefix = s;
         return roots_[p.value()];
     }
@@ -1041,14 +1042,14 @@ public:
     }
 
 private:
-    std::array<detail::Node<N>, 1 << len> roots_;
+    std::array<detail::Node<N>, 1 << iar_size> roots_;
 };
 
 /// No initial array optimization.
 template <uint8_t N>
 class Iar0 {
 public:
-    static constexpr uint8_t len = 0;
+    static constexpr uint8_t iar_size = 0;
 
     detail::Node<N>& root(auto) noexcept {
         return root_;
@@ -1060,6 +1061,26 @@ public:
 
 private:
     detail::Node<N> root_;
+};
+
+template <class T>
+concept Config = requires(T t, Bits<uint32_t> bits) {
+    requires UnsignedIntegral<typename T::Int>;
+    typename std::array<char, T::stride_size>;
+
+    requires Allocator<typename T::Allocator>;
+
+    typename std::array<char, T::iar_size>;
+    { t.root(bits) } -> std::same_as<detail::Node<T::stride_size>&>;
+    { std::as_const(t).roots() } -> std::ranges::range;
+    requires std::same_as<std::ranges::range_value_t<T>, detail::Node<T::stride_size>>;
+};
+
+template <UnsignedIntegral T>
+struct DefaultConfig {
+    using Int = T;
+    constexpr static uint8_t stride_size = 5;
+    using Allocator = SystemAllocator;
 };
 
 /// Bits Trie.
@@ -1159,7 +1180,7 @@ public:
         detail::Node<N>* node = &roots_.root(prefix);
 
         std::optional<std::pair<uint8_t, T>> longest;
-        uint8_t offset = Iar::len;
+        uint8_t offset = Iar::iar_size;
         auto const update_longest = [&longest, &offset](auto node, auto slice) {
             uint8_t vec_idx = 0;
             if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
@@ -1266,7 +1287,7 @@ public:
         auto suffix = prefix;
         detail::Node<N>* node = &roots_.root(suffix);
 
-        uint8_t offset = Iar::len;
+        uint8_t offset = Iar::iar_size;
         auto const visit = [&offset, prefix, &on_super](auto node, auto slice) {
             for (auto len = 0u; len <= slice.len(); ++len) {
                 uint8_t vec_idx = 0;
