@@ -130,8 +130,13 @@ if(${PROJECT_NAME}_BENCHMARKS)
     target_link_libraries(bench_throughput_iar16 PRIVATE ${PROJECT_NAME})
     set_target_build_settings(bench_throughput_iar16)
 
+    add_executable(bench_no_lookup_table bench/no_lookup_table.cpp)
+    target_link_libraries(bench_no_lookup_table PRIVATE ${PROJECT_NAME})
+    set_target_build_settings(bench_no_lookup_table)
+
     add_executable(bench_lookup_table bench/lookup_table.cpp)
     target_link_libraries(bench_lookup_table PRIVATE ${PROJECT_NAME})
+    target_compile_definitions(bench_lookup_table PRIVATE -D${PROJECT_NAME}_LOOKUP_TABLE)
     set_target_build_settings(bench_lookup_table)
 endif()
 
