@@ -44,7 +44,7 @@ int main() {
     };
 
     std::cout << "-----------------------\n";
-    std::cout << "lookup table\n";
+    std::cout << "no lookup table\n";
     {
 
         ByeTrie<uint32_t, long, SystemAllocator, 3> trie;

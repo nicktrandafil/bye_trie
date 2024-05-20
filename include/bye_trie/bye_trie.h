@@ -340,6 +340,14 @@ constexpr bool exists_algo(uint8_t& values_before,
     return false;
 }
 
+template <uint8_t N>
+bool exists_select(uint8_t& values_before,
+                   BitmapIndexType<N> inner,
+                   Stride<N - 1> bits) noexcept {
+    return exists_algo<N>(values_before, inner, bits);
+}
+
+#ifdef bye_trie_LOOKUP_TABLE
 template <size_t N>
 inline constexpr bool exists_ht(uint8_t& values_before,
                                 BitmapIndexType<N> inner,
@@ -370,25 +378,19 @@ inline constexpr bool exists_ht(uint8_t& values_before,
     return ht[inner][z].exists;
 }
 
-template <uint8_t N>
-bool exists_select(uint8_t& values_before,
-                   BitmapIndexType<N> inner,
-                   Stride<N - 1> bits) noexcept {
-    return exists_algo<N>(values_before, inner, bits);
+template <>
+inline bool exists_select<3>(uint8_t& values_before,
+                             BitmapIndexType<3> inner,
+                             Stride<2> bits) noexcept {
+    assert([&] {
+        uint8_t v1 = 0;
+        uint8_t v2 = 0;
+        return exists_algo<3>(v1, inner, bits) == exists_ht<3>(v2, inner, bits)
+            && v1 == v2;
+    }());
+    return exists_ht<3>(values_before, inner, bits);
 }
-
-// template <>
-// inline bool exists_select<3>(uint8_t& values_before,
-//                              BitmapIndexType<3> inner,
-//                              Stride<2> bits) noexcept {
-//     assert([&] {
-//         uint8_t v1 = 0;
-//         uint8_t v2 = 0;
-//         return exists_algo<3>(v1, inner, bits) == exists_ht<3>(v2, inner, bits)
-//             && v1 == v2;
-//     }());
-//     return exists_ht<3>(values_before, inner, bits);
-// }
+#endif
 
 // 0|0000000000000000|00000000|0000|00|0
 //                 16        8    4  2 1
@@ -1074,13 +1076,6 @@ concept Config = requires(T t, Bits<uint32_t> bits) {
     { t.root(bits) } -> std::same_as<detail::Node<T::stride_size>&>;
     { std::as_const(t).roots() } -> std::ranges::range;
     requires std::same_as<std::ranges::range_value_t<T>, detail::Node<T::stride_size>>;
-};
-
-template <UnsignedIntegral T>
-struct DefaultConfig {
-    using Int = T;
-    constexpr static uint8_t stride_size = 5;
-    using Allocator = SystemAllocator;
 };
 
 /// Bits Trie.
