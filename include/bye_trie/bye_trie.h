@@ -832,7 +832,9 @@ private:
 
 template <uint8_t N, class T>
 inline constexpr uint8_t leaf_pos(Bits<T> prefix) noexcept {
-    return prefix.len() - prefix.len() % detail::Stride<N>::bits_count;
+    return prefix.len() == 0
+                 ? 0
+                 : (prefix.len() - prefix.len() % detail::Stride<N>::bits_count);
 }
 
 } // namespace detail
@@ -900,6 +902,7 @@ public:
                                          .values()[vec_idx])};
     }
 
+    /// \throw std::bad_alloc
     SubsIterator& operator++() noexcept(false) {
         ++value_iter_bits;
         while (true) {
@@ -950,8 +953,6 @@ public:
                 ++child_iter_bits;
                 path.pop_back();
             } else {
-                node = {};
-                prefix = fixed_bits = value_iter_bits = child_iter_bits = {};
                 break;
             }
         }
@@ -961,7 +962,8 @@ public:
     bool operator==(SubsIterator const& rhs) const noexcept {
         return prefix == rhs.prefix
             && fixed_bits.concatenated(value_iter_bits)
-                       == rhs.fixed_bits.concatenated(rhs.value_iter_bits);
+                       == rhs.fixed_bits.concatenated(rhs.value_iter_bits)
+            && child_iter_bits == rhs.child_iter_bits;
     }
 
 private:
@@ -971,6 +973,7 @@ private:
     template <UnsignedIntegral, TrivialLittleObject, uint8_t>
     friend class ByeTrieSubs;
 
+    /// \throw std::bad_alloc
     explicit SubsIterator(detail::Node<N> node, Bits<P> prefix) noexcept(false)
             : node{node} {
         std::tie(this->prefix, this->fixed_bits) =
@@ -984,6 +987,20 @@ private:
         if (!node.internal_bitmap.exists(vec_idx, slice)) {
             ++(*this);
         }
+    }
+
+    /// \throw std::bad_alloc
+    SubsIterator one_past_end() const noexcept(false) {
+        auto ret = *this;
+        if (path.size() != 0) {
+            ret.path = {};
+            ret.prefix = path[0].prefix;
+        }
+        ret.value_iter_bits =
+                Bits<P>(0, detail::Stride<N>::bits_count - fixed_bits.len());
+        ret.child_iter_bits =
+                Bits<P>(0, detail::Stride<N>::bits_count - fixed_bits.len() + 1);
+        return ret;
     }
 
     struct State {
@@ -1011,7 +1028,7 @@ public:
     }
 
     SubsIterator<P, T, N> end() const noexcept(false) {
-        return SubsIterator<P, T, N>{{}, {}};
+        return begin_.one_past_end();
     }
 
 private:
