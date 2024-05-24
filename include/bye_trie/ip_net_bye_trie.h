@@ -103,8 +103,8 @@ public:
         bool operator==(value_type const& rhs) const noexcept = default;
 
         friend std::ostream& operator<<(std::ostream& os, value_type const& rhs) {
-            return os << "{ prefix: " << rhs.prefix << "; "
-                      << " value: " << rhs.value << "}";
+            return os << "{ prefix: " << rhs.prefix << "; " << " value: " << rhs.value
+                      << "}";
         }
 
         PrefixType prefix;
@@ -173,7 +173,7 @@ public:
     using Base::size;
 
     auto insert(IpNetTypeCopyOptimized prefix,
-                T value) noexcept(noexcept(Base::insert({}, {}))) {
+                T value) noexcept(noexcept(static_cast<Base*>(this)->insert({}, {}))) {
         return Base::insert(
                 Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
                      static_cast<uint8_t>(prefix.prefix_length())},
@@ -181,7 +181,7 @@ public:
     }
 
     auto replace(IpNetTypeCopyOptimized prefix,
-                 T value) noexcept(noexcept(Base::replace({}, {}))) {
+                 T value) noexcept(noexcept(static_cast<Base*>(this)->replace({}, {}))) {
         return Base::replace(
                 Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
                      static_cast<uint8_t>(prefix.prefix_length())},
@@ -216,7 +216,8 @@ public:
                      static_cast<uint8_t>(prefix.prefix_length())})};
     }
 
-    std::vector<Value<IpNetType, T>> supers(IpNetTypeCopyOptimized prefix) const noexcept(false) {
+    std::vector<Value<IpNetType, T>> supers(IpNetTypeCopyOptimized prefix) const
+            noexcept(false) {
         std::vector<Value<IpNetType, T>> ret;
         ret.reserve(sizeof(IntType) * CHAR_BIT);
         visit_supers(prefix,

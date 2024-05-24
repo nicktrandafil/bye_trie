@@ -544,14 +544,14 @@ TEMPLATE_LIST_TEST_CASE("Erase values", "[ByeTrie][erase_exact]", Ns) {
 }
 
 TEMPLATE_LIST_TEST_CASE("", "[RecyclingStack]", Ns) {
-    constexpr auto N = TestType{};
+    constexpr auto N = TestType::value;
 
     SECTION("useless") {
         std::array<detail::ErasedNode<TestType{}>, 1> storage;
         detail::RecyclingStack<N> stack;
         stack.recycle(std::span(storage));
         int i = 0;
-        stack.for_each_useless([&storage, &i, N](auto blk) {
+        stack.for_each_useless([&storage, &i](auto blk) {
             REQUIRE(blk == MemBlk{storage.data(), sizeof(detail::Node<N>)});
             i += 1;
         });
@@ -562,7 +562,7 @@ TEMPLATE_LIST_TEST_CASE("", "[RecyclingStack]", Ns) {
         detail::RecyclingStack<N> stack;
         stack.recycle(std::span(storage));
         int i = 0;
-        stack.for_each_free([&storage, &i, N](auto blk) {
+        stack.for_each_free([&storage, &i](auto blk) {
             REQUIRE(blk == MemBlk{storage.data(), sizeof(detail::Node<N>) * 2});
             i += 1;
         });
@@ -590,7 +590,7 @@ TEMPLATE_LIST_TEST_CASE("", "[RecyclingStack]", Ns) {
         }
         REQUIRE(stack.empty());
         int i = 0;
-        stack.for_each_free([&storage, &i, N](auto blk) {
+        stack.for_each_free([&storage, &i](auto blk) {
             REQUIRE(blk == MemBlk{storage.data(), sizeof(detail::Node<N>) * 2});
             i += 1;
         });
