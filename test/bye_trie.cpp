@@ -639,7 +639,7 @@ TEST_CASE("Exception guarantee", "[ByeTrie][insert]") {
     }
 }
 
-TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][ByeTrieSubsIterator]", Ns) {
+TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
     using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, TestType{}>;
     using Value = ByeTrieSubs<uint32_t, long, TestType{}>::ValueType;
 
@@ -725,6 +725,42 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][ByeTrieSubsIterator]", Ns) {
         std::vector<Value> const expected{Value{Bits{0x00ffffffu, 24}, 1},
                                           Value{Bits{0x01ffffffu, 32}, 2},
                                           Value{Bits{0x03ffffffu, 32}, 3}};
+        REQUIRE(values == expected);
+    }
+
+    SECTION("zero net") {
+        trie.insert(Bits{0x00000000u, 0}, 1);
+        trie.insert(Bits{0x01ffffffu, 32}, 2);
+        trie.insert(Bits{0x03ffffffu, 32}, 3);
+        trie.insert(Bits{0x040fffffu, 32}, 4);
+        auto const subs = trie.subs(Bits{0x00000000u, 0});
+        std::vector<Value> values;
+        for (auto const x : subs) {
+            values.push_back(x);
+        }
+        std::vector<Value> const expected{
+                Value{Bits{0x00000000u, 0}, 1},
+                Value{Bits{0x040fffffu, 32}, 4},
+                Value{Bits{0x01ffffffu, 32}, 2},
+                Value{Bits{0x03ffffffu, 32}, 3},
+        };
+        REQUIRE(values == expected);
+    }
+
+    SECTION("zero net doesn't exist") {
+        trie.insert(Bits{0x01ffffffu, 32}, 2);
+        trie.insert(Bits{0x03ffffffu, 32}, 3);
+        trie.insert(Bits{0x040fffffu, 32}, 4);
+        auto const subs = trie.subs(Bits{0x00000000u, 0});
+        std::vector<Value> values;
+        for (auto const x : subs) {
+            values.push_back(x);
+        }
+        std::vector<Value> const expected{
+                Value{Bits{0x040fffffu, 32}, 4},
+                Value{Bits{0x01ffffffu, 32}, 2},
+                Value{Bits{0x03ffffffu, 32}, 3},
+        };
         REQUIRE(values == expected);
     }
 }
