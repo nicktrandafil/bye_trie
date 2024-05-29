@@ -1131,16 +1131,15 @@ private:
                              Bits<P> prefix,
                              detail::Node<N> node,
                              Bits<P> reminder) noexcept(false)
-            : node{node} {
+            : node{node}
+            , prefix{prefix}
+            , child_iter_bits{reminder} {
         for (unsigned i = 0; i < nodes.size(); ++i) {
             path.emplace_back(nodes[i],
                               prefix.prefix(i * detail::Stride<N>::bits_count),
                               prefix.sub(i * detail::Stride<N>::bits_count,
                                          detail::Stride<N>::bits_count));
         }
-
-        std::tie(this->prefix, this->value_iter_bits) =
-                reminder.split_at(detail::leaf_pos<N>(reminder));
 
         assert(value_iter_bits.len() < detail::Stride<N>::bits_count);
         this->child_iter_bits = Bits<P>{0, detail::Stride<N>::bits_count};
@@ -1324,6 +1323,32 @@ public:
                                         .value(vec_idx));
     }
 
+    /// Match exact prefix returning iterator
+    ByeTrieIterator<P, T, N> match_exact_iter(Bits<P> prefix) const noexcept {
+        auto suffix = prefix;
+        detail::Node<N>* node = &roots_.root(suffix);
+
+        std::vector<detail::Node<N>> path;
+        auto const visit = [&path](auto node, auto) { path.push_back(node); };
+        find_leaf_branch(node, suffix, visit);
+
+        if (suffix.len() > detail::Stride<N - 1>::bits_count) {
+            return end();
+        }
+
+        uint8_t vec_idx;
+        if (!node->internal_bitmap.exists(vec_idx, suffix)) {
+            return end();
+        }
+
+        return ByeTrieIterator<P, T, N>(
+                std::move(path),
+                prefix,
+                *node,
+                suffix); // todo: the iterator can assume the give him an existing prefix
+                         // and do the redundant check
+    }
+
     /// Match longest prefix.
     std::optional<std::pair<uint8_t, T>> match_longest(Bits<P> prefix) const noexcept {
         detail::Node<N>* node = &roots_.root(prefix);
@@ -1437,10 +1462,10 @@ public:
         detail::Node<N>* node = &roots_.root(suffix);
 
         uint8_t offset = Iar::iar_size;
-        auto const visit = [&offset, prefix, &on_super](auto node, auto slice) {
-            for (auto len = 0u; len <= slice.len(); ++len) {
+        auto const visit = [&offset, prefix, &on_super](auto node, auto reminder) {
+            for (auto len = 0u; len <= reminder.len(); ++len) {
                 uint8_t vec_idx = 0;
-                if (node.internal_bitmap.exists(vec_idx, slice.prefix(len))) {
+                if (node.internal_bitmap.exists(vec_idx, reminder.prefix(len))) {
                     on_super(prefix.sub(0, offset + len),
                              std::bit_cast<T>(
                                      detail::NodeVec{node.children,
@@ -1461,13 +1486,13 @@ public:
 
     // \throw std::bad_alloc
     template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0<N>>>* = nullptr>
-    ByeTrieIterator<P, T, N> begin() noexcept(false) {
+    ByeTrieIterator<P, T, N> begin() const noexcept(false) {
         return ByeTrieIterator<P, T, N>({}, {}, roots_.root(), {});
     }
 
     // \throw std::bad_alloc
     template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0<N>>>* = nullptr>
-    ByeTrieIterator<P, T, N> end() noexcept(false) {
+    ByeTrieIterator<P, T, N> end() const noexcept(false) {
         return ByeTrieIterator<P, T, N>::one_past_end();
     }
 
