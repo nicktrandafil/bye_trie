@@ -765,9 +765,9 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
     }
 }
 
-TEST_CASE("", "[ByeTrie][ByeTrieIterator]") {
-    using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, 3>;
-    using Value = ByeTrieSubs<uint32_t, long, 3>::ValueType;
+TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][ByeTrieIterator]", Ns) {
+    using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, TestType{}>;
+    using Value = ByeTrieSubs<uint32_t, long, TestType{}>::ValueType;
 
     ByeTrie trie;
 
@@ -815,6 +815,38 @@ TEST_CASE("", "[ByeTrie][ByeTrieIterator]") {
             }
             REQUIRE(range2
                     == (std::vector{Value{Bits{000u, 3}, 3}, Value{Bits{001u, 3}, 4}}));
+        }
+
+        SECTION("match_longest_iter, total ordering") {
+            trie.insert(Bits{0000u, 5}, 5);
+            auto mid = trie.match_longest_iter(Bits{0000u, 4});
+            std::vector<Value> range1;
+            // todo: use subrange
+            for (auto it = trie.begin(); it != mid; ++it) {
+                range1.push_back(*it);
+            }
+            REQUIRE(range1
+                    == (std::vector{Value{Bits{0u, 0}, 1}, Value{Bits{11u, 2}, 2}}));
+            std::vector<Value> range2;
+            // todo: use subrange
+            for (auto it = mid; it != trie.end(); ++it) {
+                range2.push_back(*it);
+            }
+            if constexpr (TestType{} == 3) {
+                REQUIRE(range2
+                        == (std::vector{
+                                Value{Bits{000u, 3}, 3},
+                                Value{Bits{00000u, 5}, 5},
+                                Value{Bits{001u, 3}, 4},
+                        }));
+            } else {
+                REQUIRE(range2
+                        == (std::vector{
+                                Value{Bits{000u, 3}, 3},
+                                Value{Bits{001u, 3}, 4},
+                                Value{Bits{00000u, 5}, 5},
+                        }));
+            }
         }
     }
 }

@@ -1133,7 +1133,7 @@ private:
                              Bits<P> reminder) noexcept(false)
             : node{node}
             , prefix{prefix}
-            , child_iter_bits{reminder} {
+            , value_iter_bits{reminder} {
         for (unsigned i = 0; i < nodes.size(); ++i) {
             path.emplace_back(nodes[i],
                               prefix.prefix(i * detail::Stride<N>::bits_count),
@@ -1323,8 +1323,10 @@ public:
                                         .value(vec_idx));
     }
 
-    /// Match exact prefix returning iterator
-    ByeTrieIterator<P, T, N> match_exact_iter(Bits<P> prefix) const noexcept {
+    /// Match exact prefix returning iterator.
+    /// \throw std::bad_alloc
+    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0<N>>>* = nullptr>
+    ByeTrieIterator<P, T, N> match_exact_iter(Bits<P> prefix) const noexcept(false) {
         auto suffix = prefix;
         detail::Node<N>* node = &roots_.root(suffix);
 
@@ -1343,7 +1345,7 @@ public:
 
         return ByeTrieIterator<P, T, N>(
                 std::move(path),
-                prefix,
+                prefix.prefix(prefix.len() - suffix.len()),
                 *node,
                 suffix); // todo: the iterator can assume the give him an existing prefix
                          // and do the redundant check
@@ -1376,6 +1378,44 @@ public:
         }
 
         return longest;
+    }
+
+    /// Match longest prefix returning iterator.
+    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0<N>>>* = nullptr>
+    ByeTrieIterator<P, T, N> match_longest_iter(Bits<P> prefix) const noexcept(false) {
+        auto suffix = prefix;
+        detail::Node<N>* node = &roots_.root(suffix);
+
+        std::optional<std::pair<detail::Node<N>, uint8_t>> longest;
+        std::vector<detail::Node<N>> path;
+        auto const update_longest = [&longest, &path](auto node, auto slice) {
+            uint8_t vec_idx = 0;
+            if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
+                longest = std::pair{
+                        node, detail::Stride<N>::bits_count * path.size() + len.value()};
+            }
+            path.push_back(node);
+        };
+
+        find_leaf_branch(node, suffix, update_longest);
+        if (suffix.len() < detail::Stride<N>::bits_count) {
+            update_longest(*node, suffix);
+        }
+
+        if (!longest.has_value()) {
+            return end();
+        }
+
+        path.erase(path.begin() + longest->second / detail::Stride<N>::bits_count,
+                   path.end());
+
+        return ByeTrieIterator<P, T, N>(
+                path,
+                prefix.prefix(path.size() * detail::Stride<N>::bits_count),
+                longest->first,
+                prefix.sub(path.size() * detail::Stride<N>::bits_count,
+                           longest->second
+                                   - path.size() * detail::Stride<N>::bits_count));
     }
 
     /// Erase exact prefix.
