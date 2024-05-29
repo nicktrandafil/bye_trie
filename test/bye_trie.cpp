@@ -788,6 +788,7 @@ TEST_CASE("", "[ByeTrie][ByeTrieIterator]") {
         trie.insert(Bits{11u, 2}, 2);
         trie.insert(Bits{000u, 3}, 3);
         trie.insert(Bits{001u, 3}, 4);
+
         std::vector<Value> actual;
         for (auto x : trie) {
             actual.push_back(x);
@@ -797,6 +798,24 @@ TEST_CASE("", "[ByeTrie][ByeTrieIterator]") {
                                           Value{Bits{000u, 3}, 3},
                                           Value{Bits{001u, 3}, 4}};
         REQUIRE(actual == expected);
+
+        SECTION("match_exact_iter, total ordering") {
+            auto mid = trie.match_exact_iter(Bits{000u, 3});
+            std::vector<Value> range1;
+            // todo: use subrange
+            for (auto it = trie.begin(); it != mid; ++it) {
+                range1.push_back(*it);
+            }
+            REQUIRE(range1
+                    == (std::vector{Value{Bits{0u, 0}, 1}, Value{Bits{11u, 2}, 2}}));
+            std::vector<Value> range2;
+            // todo: use subrange
+            for (auto it = mid; it != trie.end(); ++it) {
+                range2.push_back(*it);
+            }
+            REQUIRE(range2
+                    == (std::vector{Value{Bits{000u, 3}, 3}, Value{Bits{001u, 3}, 4}}));
+        }
     }
 }
 
