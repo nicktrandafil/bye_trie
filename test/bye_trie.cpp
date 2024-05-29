@@ -765,6 +765,41 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
     }
 }
 
+TEST_CASE("", "[ByeTrie][ByeTrieIterator]") {
+    using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, 3>;
+    using Value = ByeTrieSubs<uint32_t, long, 3>::ValueType;
+
+    ByeTrie trie;
+
+    SECTION("empty") {
+        REQUIRE((trie.begin() == trie.end()));
+    }
+
+    SECTION("one 0/0") {
+        trie.insert(Bits{0u, 0}, 1);
+        REQUIRE((*trie.begin() == Value{Bits{0u, 0}, 1}));
+        REQUIRE((trie.begin() != trie.end()));
+        REQUIRE(++trie.begin() == trie.end());
+    }
+
+    SECTION("iter node, then go to first child, iter it, then go to back and then to the "
+            "second child") {
+        trie.insert(Bits{0u, 0}, 1);
+        trie.insert(Bits{11u, 2}, 2);
+        trie.insert(Bits{000u, 3}, 3);
+        trie.insert(Bits{001u, 3}, 4);
+        std::vector<Value> actual;
+        for (auto x : trie) {
+            actual.push_back(x);
+        }
+        std::vector<Value> const expected{Value{Bits{0u, 0}, 1},
+                                          Value{Bits{11u, 2}, 2},
+                                          Value{Bits{000u, 3}, 3},
+                                          Value{Bits{001u, 3}, 4}};
+        REQUIRE(actual == expected);
+    }
+}
+
 TEST_CASE("", "[ByeTrie][visit_supers]") {
     using ByeTrie = ByeTrie<uint32_t, long>;
     ByeTrie trie;

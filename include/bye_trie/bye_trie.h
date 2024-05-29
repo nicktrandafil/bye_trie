@@ -904,7 +904,7 @@ public:
 
     /// \throw std::bad_alloc
     SubsIterator& operator++() noexcept(false) {
-        ++value_iter_bits;
+        ++value_iter_bits; // todo: can the skip this?
         while (true) {
             // find next prefix in current node
             {
@@ -1043,6 +1043,139 @@ private:
     SubsIterator<P, T, N> begin_;
 };
 
+template <UnsignedIntegral P, TrivialLittleObject T, uint8_t N>
+class ByeTrieIterator {
+public:
+    using iterator_category = std::input_iterator_tag;
+    using value_type = Value<Bits<P>, T>;
+    using difference_type = std::ptrdiff_t;
+    using pointer = value_type const*;
+    using reference = value_type;
+
+    reference operator*() const noexcept {
+        auto const prefix = this->prefix.concatenated(value_iter_bits);
+        uint8_t vec_idx = 0;
+        auto const exists = node.internal_bitmap.exists(vec_idx, value_iter_bits);
+        assert(exists);
+        static_cast<void>(exists);
+        return {prefix,
+                std::bit_cast<T>(detail::NodeVec{node.children,
+                                                 node.external_bitmap.total(),
+                                                 static_cast<uint8_t>(vec_idx + 1)}
+                                         .values()[vec_idx])};
+    }
+
+    /// \throw std::bad_alloc
+    ByeTrieIterator& operator++() noexcept(false) {
+        ++value_iter_bits;
+        while (true) {
+            // find next prefix in current node
+            {
+                while (value_iter_bits.len() < detail::Stride<N>::bits_count) {
+                    uint8_t vec_idx;
+                    if (node.internal_bitmap.exists(vec_idx, value_iter_bits)) {
+                        return *this;
+                    }
+                    ++value_iter_bits;
+                }
+            }
+
+            // go to next child
+            {
+                while (child_iter_bits.len() <= detail::Stride<N>::bits_count
+                       && !node.external_bitmap.exists(child_iter_bits)) {
+                    ++child_iter_bits;
+                }
+
+                if (child_iter_bits.len() <= detail::Stride<N>::bits_count) {
+                    auto const branches = detail::NodeVec{node.children,
+                                                          node.external_bitmap.total(),
+                                                          0}
+                                                  .branches();
+                    path.emplace_back(node, prefix, child_iter_bits);
+                    prefix = prefix.concatenated(child_iter_bits);
+                    node = branches[node.external_bitmap.before(child_iter_bits)].node;
+                    value_iter_bits = {};
+                    child_iter_bits = Bits<P>{0, detail::Stride<N>::bits_count};
+                    continue;
+                }
+            }
+
+            // go back to the parent
+            if (!path.empty()) {
+                node = path.back().node;
+                prefix = path.back().prefix;
+                value_iter_bits = Bits<P>(0, detail::Stride<N>::bits_count);
+                child_iter_bits = path.back().child_iter_bits; // todo: we might as well
+                                                               // set this to one past end
+                ++child_iter_bits;
+                path.pop_back();
+            } else {
+                break;
+            }
+        }
+        return *this;
+    }
+
+    bool operator==(ByeTrieIterator const& rhs) const noexcept {
+        return prefix == rhs.prefix && value_iter_bits == rhs.value_iter_bits
+            && child_iter_bits == rhs.child_iter_bits;
+    }
+
+private:
+    template <UnsignedIntegral, TrivialLittleObject, Allocator, uint8_t, class>
+    friend class ByeTrie;
+
+    /// \throw std::bad_alloc
+    explicit ByeTrieIterator(std::vector<detail::Node<N>> nodes,
+                             Bits<P> prefix,
+                             detail::Node<N> node,
+                             Bits<P> reminder) noexcept(false)
+            : node{node} {
+        for (unsigned i = 0; i < nodes.size(); ++i) {
+            path.emplace_back(nodes[i],
+                              prefix.prefix(i * detail::Stride<N>::bits_count),
+                              prefix.sub(i * detail::Stride<N>::bits_count,
+                                         detail::Stride<N>::bits_count));
+        }
+
+        std::tie(this->prefix, this->value_iter_bits) =
+                reminder.split_at(detail::leaf_pos<N>(reminder));
+
+        assert(value_iter_bits.len() < detail::Stride<N>::bits_count);
+        this->child_iter_bits = Bits<P>{0, detail::Stride<N>::bits_count};
+        uint8_t vec_idx;
+        if (!node.internal_bitmap.exists(vec_idx, value_iter_bits)) {
+            ++(*this);
+        }
+    }
+
+    struct State {
+        detail::Node<N> node;
+        Bits<P> prefix;
+        Bits<P> child_iter_bits;
+    };
+
+    struct one_past_end_tag {};
+    explicit ByeTrieIterator(one_past_end_tag) noexcept
+            : node{}
+            , prefix{}
+            , value_iter_bits{0, detail::Stride<N>::bits_count}
+            , child_iter_bits{0, detail::Stride<N>::bits_count + 1}
+            , path{} {
+    }
+
+    static ByeTrieIterator one_past_end() noexcept {
+        return ByeTrieIterator(one_past_end_tag{});
+    }
+
+    detail::Node<N> node;
+    Bits<P> prefix;
+    Bits<P> value_iter_bits;
+    Bits<P> child_iter_bits;
+    std::vector<State> path;
+};
+
 /// Initial Array Optimization of size 65536.
 template <uint8_t N>
 class Iar16 {
@@ -1071,6 +1204,10 @@ public:
     static constexpr uint8_t iar_size = 0;
 
     detail::Node<N>& root(auto) noexcept {
+        return root_;
+    }
+
+    detail::Node<N>& root() noexcept {
         return root_;
     }
 
@@ -1320,6 +1457,18 @@ public:
         if (suffix.len() < detail::Stride<N>::bits_count) {
             visit(*node, suffix);
         }
+    }
+
+    // \throw std::bad_alloc
+    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0<N>>>* = nullptr>
+    ByeTrieIterator<P, T, N> begin() noexcept(false) {
+        return ByeTrieIterator<P, T, N>({}, {}, roots_.root(), {});
+    }
+
+    // \throw std::bad_alloc
+    template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0<N>>>* = nullptr>
+    ByeTrieIterator<P, T, N> end() noexcept(false) {
+        return ByeTrieIterator<P, T, N>::one_past_end();
     }
 
 private:
