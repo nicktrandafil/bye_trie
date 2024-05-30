@@ -117,10 +117,19 @@ Public Member Functions</h2></td></tr>
 std::optional&lt; T &gt;&#160;</td><td class="memItemRight" valign="bottom"><b>match_exact</b> (Bits&lt; P &gt; prefix) const noexcept</td></tr>
 <tr class="memdesc:a38dbfed768edd77da362d9b53003d2f6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Match exact prefix. <br /></td></tr>
 <tr class="separator:a38dbfed768edd77da362d9b53003d2f6"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:abe8db154a0fd4cc9b3ed35590ef203bb"><td class="memTemplParams" colspan="2">template&lt;class I  = Iar, std::enable_if_t&lt; std::is_same_v&lt; I, <a class="el" href="classbye__trie_1_1Iar0.html">Iar0</a>&lt; N &gt; &gt; &gt; *  = nullptr&gt; </td></tr>
+<tr class="memitem:abe8db154a0fd4cc9b3ed35590ef203bb"><td class="memTemplItemLeft" align="right" valign="top">ByeTrieIterator&lt; P, T, N &gt;&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="classbye__trie_1_1ByeTrie.html#abe8db154a0fd4cc9b3ed35590ef203bb">match_exact_iter</a> (Bits&lt; P &gt; prefix) const noexcept(false)</td></tr>
+<tr class="memdesc:abe8db154a0fd4cc9b3ed35590ef203bb"><td class="mdescLeft">&#160;</td><td class="mdescRight">Match exact prefix returning iterator.  <a href="classbye__trie_1_1ByeTrie.html#abe8db154a0fd4cc9b3ed35590ef203bb">More...</a><br /></td></tr>
+<tr class="separator:abe8db154a0fd4cc9b3ed35590ef203bb"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a4175778ec475feb6a8d998b0ed51404a"><td class="memItemLeft" align="right" valign="top"><a id="a4175778ec475feb6a8d998b0ed51404a" name="a4175778ec475feb6a8d998b0ed51404a"></a>
 std::optional&lt; std::pair&lt; uint8_t, T &gt; &gt;&#160;</td><td class="memItemRight" valign="bottom"><b>match_longest</b> (Bits&lt; P &gt; prefix) const noexcept</td></tr>
 <tr class="memdesc:a4175778ec475feb6a8d998b0ed51404a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Match longest prefix. <br /></td></tr>
 <tr class="separator:a4175778ec475feb6a8d998b0ed51404a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a3b4fe2d0186f4416db6fa39bf0983870"><td class="memTemplParams" colspan="2"><a id="a3b4fe2d0186f4416db6fa39bf0983870" name="a3b4fe2d0186f4416db6fa39bf0983870"></a>
+template&lt;class I  = Iar, std::enable_if_t&lt; std::is_same_v&lt; I, <a class="el" href="classbye__trie_1_1Iar0.html">Iar0</a>&lt; N &gt; &gt; &gt; *  = nullptr&gt; </td></tr>
+<tr class="memitem:a3b4fe2d0186f4416db6fa39bf0983870"><td class="memTemplItemLeft" align="right" valign="top">ByeTrieIterator&lt; P, T, N &gt;&#160;</td><td class="memTemplItemRight" valign="bottom"><b>match_longest_iter</b> (Bits&lt; P &gt; prefix) const noexcept(false)</td></tr>
+<tr class="memdesc:a3b4fe2d0186f4416db6fa39bf0983870"><td class="mdescLeft">&#160;</td><td class="mdescRight">Match longest prefix returning iterator. <br /></td></tr>
+<tr class="separator:a3b4fe2d0186f4416db6fa39bf0983870"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:acc544af93122d4374ec79d6fe127436d"><td class="memItemLeft" align="right" valign="top">bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classbye__trie_1_1ByeTrie.html#acc544af93122d4374ec79d6fe127436d">erase_exact</a> (Bits&lt; P &gt; prefix) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0)))</td></tr>
 <tr class="memdesc:acc544af93122d4374ec79d6fe127436d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Erase exact prefix.  <a href="classbye__trie_1_1ByeTrie.html#acc544af93122d4374ec79d6fe127436d">More...</a><br /></td></tr>
 <tr class="separator:acc544af93122d4374ec79d6fe127436d"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -222,6 +231,40 @@ class bye_trie::ByeTrie&lt; P, T, Alloc, N, Iar &gt;</div><p >Bits Trie. Trie da
 <dl class="exception"><dt>Exceptions</dt><dd>
   <table class="exception">
     <tr><td class="paramname">Forwards</td><td><code>Alloc::realloc</code> exception </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="abe8db154a0fd4cc9b3ed35590ef203bb" name="abe8db154a0fd4cc9b3ed35590ef203bb"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abe8db154a0fd4cc9b3ed35590ef203bb">&#9670;&nbsp;</a></span>match_exact_iter()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">ByeTrieIterator&lt; P, T, N &gt; match_exact_iter </td>
+          <td>(</td>
+          <td class="paramtype">Bits&lt; P &gt;&#160;</td>
+          <td class="paramname"><em>prefix</em></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Match exact prefix returning iterator. </p>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::bad_alloc</td><td></td></tr>
   </table>
   </dd>
 </dl>
