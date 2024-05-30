@@ -24,8 +24,6 @@
 
 #include "bye_trie/bye_trie.h"
 
-#include "bye_trie/uint128.h"
-
 #include <catch2/catch_all.hpp>
 
 using namespace bye_trie;
@@ -413,6 +411,26 @@ TEMPLATE_LIST_TEST_CASE("Insert values", "[ByeTrie][insert]", Ns) {
     }
 }
 
+TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][insert_ref]", Ns) {
+    bye_trie::ByeTrie<uint32_t, long> trie;
+
+    SECTION("basic") {
+        auto x = trie.insert_ref(Bits{0u, 4}, 0);
+        REQUIRE(x.second);
+        REQUIRE(*x.first == 0);
+
+        *x.first = 1;
+        REQUIRE(*trie.match_exact(Bits{0u, 4}) == 1);
+
+        x = trie.insert_ref(Bits{0u, 4}, 2);
+        REQUIRE(!x.second);
+        REQUIRE(*x.first == 1);
+
+        *x.first = 3;
+        REQUIRE(*trie.match_exact(Bits{0u, 4}) == 3);
+    }
+}
+
 TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][replace]", Ns) {
     bye_trie::ByeTrie<uint32_t, long, SystemAllocator, TestType{}> trie;
     REQUIRE(trie.replace(Bits{0b0'00001u, 6}, 1) == std::nullopt);
@@ -661,18 +679,19 @@ TEST_CASE("Exception guarantee", "[ByeTrie][insert]") {
 
 TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
     using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, TestType{}>;
-    using Value = ByeTrieSubs<uint32_t, long, TestType{}>::ValueType;
 
     ByeTrie trie;
 
     SECTION("0/0 exists, begin() doesn't seek the first prefix") {
         trie.insert(Bits{0u, 0}, 1);
-        REQUIRE((*trie.subs(Bits{0u, 0}).begin() == Value{Bits{0u, 0}, 1}));
+        REQUIRE(trie.subs(Bits{0u, 0}).begin().key() == Bits{0u, 0});
+        REQUIRE(*trie.subs(Bits{0u, 0}).begin() == 1);
     }
 
     SECTION("0/0 doesn't exist, begin() seeks the first prefix") {
         trie.insert(Bits{0u, 1}, 1);
-        REQUIRE((*trie.subs(Bits{0u, 0}).begin() == Value{Bits{0u, 1}, 1}));
+        REQUIRE(trie.subs(Bits{0u, 0}).begin().key() == Bits{0u, 1});
+        REQUIRE(*trie.subs(Bits{0u, 0}).begin() == 1);
     }
 
     SECTION("empty ByeTrie, begin() == end()") {
@@ -690,7 +709,8 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
         trie.insert(Bits{0u, 0}, 1);
         trie.insert(Bits{0u, 1}, 2);
         auto const subs = trie.subs(Bits{0u, 0});
-        REQUIRE((*++subs.begin() == Value{Bits{0u, 1}, 2}));
+        REQUIRE((++subs.begin()).key() == Bits{0u, 1});
+        REQUIRE(*++subs.begin() == 2);
     }
 
     SECTION("increment reaches end") {
@@ -704,15 +724,16 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
         trie.insert(Bits{0u, 2}, 2);
         trie.insert(Bits{0u, 3}, 3);
         trie.insert(Bits{0u, 4}, 4);
-        std::vector<Value> values;
+        std::vector<std::pair<Bits<unsigned>, long>> values;
         auto const subs = trie.subs(Bits{0u, 0});
-        for (auto const x : subs) {
-            values.push_back(x);
+        for (auto it = subs.begin(); it != subs.end(); ++it) {
+            values.emplace_back(it.key(), *it);
         }
-        std::vector<Value> const expected{Value{Bits{0u, 1}, 1},
-                                          Value{Bits{0u, 2}, 2},
-                                          Value{Bits{0u, 3}, 3},
-                                          Value{Bits{0u, 4}, 4}};
+        std::vector<std::pair<Bits<unsigned>, long>> const expected{
+                std::pair{Bits{0u, 1}, 1},
+                std::pair{Bits{0u, 2}, 2},
+                std::pair{Bits{0u, 3}, 3},
+                std::pair{Bits{0u, 4}, 4}};
         REQUIRE(values == expected);
     }
 
@@ -720,8 +741,10 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
         trie.insert(Bits{0u, 5}, 1);
         trie.insert(Bits{0u, 6}, 2);
         auto const subs = trie.subs(Bits{0u, 0});
-        REQUIRE((*subs.begin() == Value{Bits{0u, 5}, 1}));
-        REQUIRE((*++subs.begin() == Value{Bits{0u, 6}, 2}));
+        REQUIRE((subs.begin().key() == Bits{0u, 5}));
+        REQUIRE((*subs.begin() == 1));
+        REQUIRE(((++subs.begin()).key() == Bits{0u, 6}));
+        REQUIRE((*++subs.begin() == 2));
         REQUIRE((++ ++subs.begin() == subs.end()));
     }
 
@@ -738,13 +761,14 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
         trie.insert(Bits{0x03ffffffu, 32}, 3);
         trie.insert(Bits{0x040fffffu, 32}, 4);
         auto const subs = trie.subs(Bits{0x00ffffffu, 24});
-        std::vector<Value> values;
-        for (auto const x : subs) {
-            values.push_back(x);
+        std::vector<std::pair<Bits<unsigned>, long>> values;
+        for (auto it = subs.begin(); it != subs.end(); ++it) {
+            values.emplace_back(it.key(), *it);
         }
-        std::vector<Value> const expected{Value{Bits{0x00ffffffu, 24}, 1},
-                                          Value{Bits{0x01ffffffu, 32}, 2},
-                                          Value{Bits{0x03ffffffu, 32}, 3}};
+        std::vector<std::pair<Bits<unsigned>, long>> const expected{
+                {Bits{0x00ffffffu, 24}, 1},
+                {Bits{0x01ffffffu, 32}, 2},
+                {Bits{0x03ffffffu, 32}, 3}};
         REQUIRE(values == expected);
     }
 
@@ -754,15 +778,15 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
         trie.insert(Bits{0x03ffffffu, 32}, 3);
         trie.insert(Bits{0x040fffffu, 32}, 4);
         auto const subs = trie.subs(Bits{0x00000000u, 0});
-        std::vector<Value> values;
-        for (auto const x : subs) {
-            values.push_back(x);
+        std::vector<std::pair<Bits<unsigned>, long>> values;
+        for (auto it = subs.begin(); it != subs.end(); ++it) {
+            values.emplace_back(it.key(), *it);
         }
-        std::vector<Value> const expected{
-                Value{Bits{0x00000000u, 0}, 1},
-                Value{Bits{0x040fffffu, 32}, 4},
-                Value{Bits{0x01ffffffu, 32}, 2},
-                Value{Bits{0x03ffffffu, 32}, 3},
+        std::vector<std::pair<Bits<unsigned>, long>> const expected{
+                {Bits{0x00000000u, 0}, 1},
+                {Bits{0x040fffffu, 32}, 4},
+                {Bits{0x01ffffffu, 32}, 2},
+                {Bits{0x03ffffffu, 32}, 3},
         };
         REQUIRE(values == expected);
     }
@@ -772,14 +796,14 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
         trie.insert(Bits{0x03ffffffu, 32}, 3);
         trie.insert(Bits{0x040fffffu, 32}, 4);
         auto const subs = trie.subs(Bits{0x00000000u, 0});
-        std::vector<Value> values;
-        for (auto const x : subs) {
-            values.push_back(x);
+        std::vector<std::pair<Bits<unsigned>, long>> values;
+        for (auto it = subs.begin(); it != subs.end(); ++it) {
+            values.emplace_back(it.key(), *it);
         }
-        std::vector<Value> const expected{
-                Value{Bits{0x040fffffu, 32}, 4},
-                Value{Bits{0x01ffffffu, 32}, 2},
-                Value{Bits{0x03ffffffu, 32}, 3},
+        std::vector<std::pair<Bits<unsigned>, long>> const expected{
+                {Bits{0x040fffffu, 32}, 4},
+                {Bits{0x01ffffffu, 32}, 2},
+                {Bits{0x03ffffffu, 32}, 3},
         };
         REQUIRE(values == expected);
     }
@@ -787,7 +811,6 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
 
 TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][ByeTrieIterator]", Ns) {
     using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, TestType{}>;
-    using Value = ByeTrieSubs<uint32_t, long, TestType{}>::ValueType;
 
     ByeTrie trie;
 
@@ -797,8 +820,9 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][ByeTrieIterator]", Ns) {
 
     SECTION("one 0/0") {
         trie.insert(Bits{0u, 0}, 1);
-        REQUIRE((*trie.begin() == Value{Bits{0u, 0}, 1}));
         REQUIRE((trie.begin() != trie.end()));
+        REQUIRE((trie.begin().key() == Bits{0u, 0}));
+        REQUIRE(*trie.begin() == 1);
         REQUIRE(++trie.begin() == trie.end());
     }
 
@@ -809,36 +833,32 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][ByeTrieIterator]", Ns) {
         trie.insert(Bits{000u, 3}, 3);
         trie.insert(Bits{001u, 3}, 4);
 
-        std::vector<Value> actual;
-        for (auto x : trie) {
-            actual.push_back(x);
+        std::vector<std::pair<Bits<unsigned>, long>> actual;
+        for (auto it = trie.begin(); it != trie.end(); ++it) {
+            actual.emplace_back(it.key(), *it);
         }
-        std::vector<Value> const expected{Value{Bits{0u, 0}, 1},
-                                          Value{Bits{11u, 2}, 2},
-                                          Value{Bits{000u, 3}, 3},
-                                          Value{Bits{001u, 3}, 4}};
+        std::vector<std::pair<Bits<unsigned>, long>> const expected{{Bits{0u, 0}, 1},
+                                                                    {Bits{11u, 2}, 2},
+                                                                    {Bits{000u, 3}, 3},
+                                                                    {Bits{001u, 3}, 4}};
         REQUIRE(actual == expected);
 
         SECTION("supers") {
             trie.insert(Bits{0000u, 5}, 5);
             auto it = trie.match_longest_iter(Bits{0000u, 5});
-            std::vector<Value> range1;
+            std::vector<std::pair<Bits<unsigned>, long>> range1;
             do {
-                range1.push_back(*it);
+                range1.emplace_back(it.key(), *it);
             } while (it.next_super());
-            REQUIRE(range1
-                    == (std::vector{
-                            Value{Bits{0000u, 5}, 5},
-                            Value{Bits{000u, 3}, 3},
-                            Value{Bits{0u, 0}, 1},
-                    }));
+            std::vector<std::pair<Bits<unsigned>, long>> const expected{
+                    {Bits{0000u, 5}, 5}, {Bits{000u, 3}, 3}, {Bits{0u, 0}, 1}};
+            REQUIRE(range1 == expected);
         }
     }
 }
 
 TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][match_exact_iter]", Ns) {
     using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, TestType{}>;
-    using Value = ByeTrieSubs<uint32_t, long, TestType{}>::ValueType;
 
     ByeTrie trie;
 
@@ -849,19 +869,23 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][match_exact_iter]", Ns) {
 
     SECTION("total ordering") {
         auto mid = trie.match_exact_iter(Bits{000u, 3});
-        std::vector<Value> range1;
+        std::vector<std::pair<Bits<unsigned>, long>> range1;
         // todo: use subrange
         for (auto it = trie.begin(); it != mid; ++it) {
-            range1.push_back(*it);
+            range1.emplace_back(it.key(), *it);
         }
-        REQUIRE(range1 == (std::vector{Value{Bits{0u, 0}, 1}, Value{Bits{11u, 2}, 2}}));
-        std::vector<Value> range2;
+        REQUIRE(range1
+                == (std::vector<std::pair<Bits<unsigned>, long>>{{Bits{0u, 0}, 1},
+                                                                 {Bits{11u, 2}, 2}}));
+
+        std::vector<std::pair<Bits<unsigned>, long>> range2;
         // todo: use subrange
         for (auto it = mid; it != trie.end(); ++it) {
-            range2.push_back(*it);
+            range2.emplace_back(it.key(), *it);
         }
         REQUIRE(range2
-                == (std::vector{Value{Bits{000u, 3}, 3}, Value{Bits{001u, 3}, 4}}));
+                == (std::vector<std::pair<Bits<unsigned>, long>>{{Bits{000u, 3}, 3},
+                                                                 {Bits{001u, 3}, 4}}));
     }
 
     SECTION("no match") {
@@ -871,7 +895,6 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][match_exact_iter]", Ns) {
 
 TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][match_longest_iter]", Ns) {
     using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, TestType{}>;
-    using Value = ByeTrieSubs<uint32_t, long, TestType{}>::ValueType;
 
     ByeTrie trie;
 
@@ -883,37 +906,39 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][match_longest_iter]", Ns) {
 
     SECTION("total ordering") {
         auto mid = trie.match_longest_iter(Bits{0000u, 4});
-        std::vector<Value> range1;
+        std::vector<std::pair<Bits<unsigned>, long>> range1;
         // todo: use subrange
         for (auto it = trie.begin(); it != mid; ++it) {
-            range1.push_back(*it);
+            range1.emplace_back(it.key(), *it);
         }
-        REQUIRE(range1 == (std::vector{Value{Bits{0u, 0}, 1}, Value{Bits{11u, 2}, 2}}));
-        std::vector<Value> range2;
+        REQUIRE(range1
+                == (std::vector<std::pair<Bits<unsigned>, long>>{{Bits{0u, 0}, 1},
+                                                                 {Bits{11u, 2}, 2}}));
+        std::vector<std::pair<Bits<unsigned>, long>> range2;
         // todo: use subrange
         for (auto it = mid; it != trie.end(); ++it) {
-            range2.push_back(*it);
+            range2.emplace_back(it.key(), *it);
         }
         if constexpr (TestType{} == 3) {
             REQUIRE(range2
-                    == (std::vector{
-                            Value{Bits{000u, 3}, 3},
-                            Value{Bits{00000u, 5}, 5},
-                            Value{Bits{001u, 3}, 4},
-                    }));
+                    == (std::vector<std::pair<Bits<unsigned>, long>>{
+                            {Bits{000u, 3}, 3},
+                            {Bits{00000u, 5}, 5},
+                            {Bits{001u, 3}, 4}}));
         } else {
             REQUIRE(range2
-                    == (std::vector{
-                            Value{Bits{000u, 3}, 3},
-                            Value{Bits{001u, 3}, 4},
-                            Value{Bits{00000u, 5}, 5},
-                    }));
+                    == (std::vector<std::pair<Bits<unsigned>, long>>{
+                            {Bits{000u, 3}, 3},
+                            {Bits{001u, 3}, 4},
+                            {Bits{00000u, 5}, 5}}));
         }
     }
 
     SECTION("0/0 last resort") {
-        REQUIRE(trie.match_longest_iter(Bits{0u, 1}) == trie.begin());
-        REQUIRE(*trie.match_longest_iter(Bits{0u, 1}) == Value{Bits{0u, 0}, 1});
+        auto it = trie.match_longest_iter(Bits{0u, 1});
+        REQUIRE(it == trie.begin());
+        REQUIRE(it.key() == Bits{0u, 0});
+        REQUIRE(*it == 1);
     }
 
     SECTION("no match") {
@@ -930,9 +955,9 @@ TEST_CASE("", "[ByeTrie][visit_supers]") {
     trie.insert(Bits{0x00'00'00'02u, 2}, 2);
     trie.insert(Bits{0x00'00'01'02u, 10}, 3);
     trie.insert(Bits{0x00'00'02'02u, 10}, 4);
-    std::vector expected{Value{Bits{0x00'00'00'00u, 0}, 0},
-                         Value{Bits{0x00'00'00'02u, 2}, 2},
-                         Value{Bits{0x00'00'01'02u, 10}, 3}};
+    std::vector<std::pair<Bits<unsigned>, long>> expected{{Bits{0x00'00'00'00u, 0}, 0},
+                                                          {Bits{0x00'00'00'02u, 2}, 2},
+                                                          {Bits{0x00'00'01'02u, 10}, 3}};
     decltype(expected) actual;
     trie.visit_supers(Bits{0x00'00'01'02u, 10},
                       [&actual](auto p, auto v) { actual.emplace_back(p, v); });
@@ -996,4 +1021,22 @@ TEST_CASE("", "[playground]") {
     trie.match_exact(Bits<uint32_t>{0u, 0});
     trie.match_longest(Bits<uint32_t>{0u, 0});
     trie.subs(Bits<uint32_t>{0u, 0});
+}
+
+TEMPLATE_LIST_TEST_CASE("Little objects", "[ByeTrie]", Ns) {
+    ByeTrie<uint32_t, char, SystemAllocator, TestType{}> trie;
+
+    SECTION("insert") {
+        trie.insert(Bits{0u, 8}, 1);
+        trie.insert(Bits{0u, 16}, 2);
+
+        REQUIRE(*trie.match_exact(Bits{0u, 8}) == 1);
+        REQUIRE(*trie.match_exact(Bits{0u, 16}) == 2);
+
+        *trie.match_exact_ref(Bits{0u, 8}) = 3;
+        REQUIRE(*trie.match_exact(Bits{0u, 8}) == 3);
+
+        *trie.match_exact_ref(Bits{0u, 16}) = 4;
+        REQUIRE(*trie.match_exact(Bits{0u, 16}) == 4);
+    }
 }

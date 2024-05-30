@@ -16,23 +16,14 @@ endif()
 
 set(sources
     include/bye_trie/bye_trie.h
-    include/bye_trie/uint128.h
 )
 
-if(${PROJECT_NAME}_BOOST_IP)
-    set(sources ${sources} include/bye_trie/ip_net_bye_trie.h)
-endif()
 add_library(${PROJECT_NAME} INTERFACE ${sources})
 target_include_directories(${PROJECT_NAME} INTERFACE include)
 
 if(NOT ${PROJECT_NAME}_sub AND ${PROJECT_NAME}_BOOST_IP)
     find_package(Boost REQUIRED  QUIET)
 endif()
-
-if(${PROJECT_NAME}_BOOST_IP)
-    target_link_libraries(${PROJECT_NAME} INTERFACE Boost::headers)
-endif()
-
 
 function(set_target_build_settings target)
     if(NOT TARGET ${target})
@@ -86,6 +77,9 @@ if(${PROJECT_NAME}_TESTS)
         set(sources ${sources} test/ip_net_bye_trie.cpp)
     endif()
     add_executable(test_${PROJECT_NAME} ${sources})
+    if(${PROJECT_NAME}_BOOST_IP)
+        target_link_libraries(test_${PROJECT_NAME} Boost::headers)
+    endif()
     target_link_libraries(test_${PROJECT_NAME} Catch2::Catch2WithMain ${PROJECT_NAME})
     set_target_build_settings(test_${PROJECT_NAME} 20)
     add_test(test_${PROJECT_NAME} test_${PROJECT_NAME})
@@ -109,18 +103,19 @@ elseif(${PROJECT_NAME}_TESTS)
 endif()
 
 if(${PROJECT_NAME}_BENCHMARKS)
-    if(NOT ${PROJECT_NAME}_BOOST_IP)
-        message(FATAL_ERROR "Benchmarks require boost::asio::ip::network")
-    endif()
-    add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/uniq_pfx_asn_dfz.csv
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/bench/uniq_pfx_asn_dfz.csv ${CMAKE_BINARY_DIR}
-        DEPENDS bench/uniq_pfx_asn_dfz.csv
-    )
-    add_custom_target(data DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/uniq_pfx_asn_dfz.csv)
-    add_executable(bench_ipv4_networks bench/ipv4_networks.cpp)
-    target_link_libraries(bench_ipv4_networks PRIVATE ${PROJECT_NAME})
-    set_target_build_settings(bench_ipv4_networks)
-    add_dependencies(bench_ipv4_networks data)
+    if(${PROJECT_NAME}_BOOST_IP)
+        add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/uniq_pfx_asn_dfz.csv
+            COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_SOURCE_DIR}/bench/uniq_pfx_asn_dfz.csv ${CMAKE_BINARY_DIR}
+            DEPENDS bench/uniq_pfx_asn_dfz.csv
+        )
+        add_custom_target(data DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/uniq_pfx_asn_dfz.csv)
+        add_executable(bench_ipv4_networks bench/ipv4_networks.cpp)
+        target_link_libraries(bench_ipv4_networks PRIVATE ${PROJECT_NAME} INTERFACE Boost::headers)
+        target_include_directories(bench_ipv4_networks PRIVATE test)
+        target_link_directories(bench_ipv4_networks PRIVATE test )
+        set_target_build_settings(bench_ipv4_networks)
+        add_dependencies(bench_ipv4_networks data)
+    endif() 
 
     add_executable(bench_throughput bench/throughput.cpp)
     target_link_libraries(bench_throughput PRIVATE ${PROJECT_NAME})
