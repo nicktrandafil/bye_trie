@@ -1349,6 +1349,31 @@ public:
                                         .value(vec_idx));
     }
 
+    T* match_exact_ref(Bits<P> prefix) const noexcept {
+        detail::Node<N>* node = &roots_.root(prefix);
+
+        find_leaf_branch(node, prefix, noop);
+        if (prefix.len() > detail::Stride<N - 1>::bits_count) {
+            return nullptr;
+        }
+
+        uint8_t vec_idx;
+        if (!node->internal_bitmap.exists(vec_idx, prefix)) {
+            return nullptr;
+        }
+
+        auto& val = detail::NodeVec{node->children,
+                                    node->external_bitmap.total(),
+                                    static_cast<uint8_t>(vec_idx + 1)}
+                            .value(vec_idx);
+
+#if __cplusplus >= 202300L
+        return std::start_lifetime_as<T>(&val);
+#else
+        return reinterpret_cast<T*>(&val); // UB! OK if strict aliasing is off
+#endif
+    }
+
     /// Match exact prefix returning iterator.
     /// \throw std::bad_alloc
     template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0<N>>>* = nullptr>
@@ -1393,6 +1418,42 @@ public:
                                                 node.external_bitmap.total(),
                                                 static_cast<uint8_t>(vec_idx + 1)}
                                         .value(vec_idx)),
+                };
+            }
+            offset += detail::Stride<N>::bits_count;
+        };
+
+        find_leaf_branch(node, prefix, update_longest);
+        if (prefix.len() < detail::Stride<N>::bits_count) {
+            update_longest(*node, prefix);
+        }
+
+        return longest;
+    }
+
+    std::optional<std::pair<uint8_t, T*>> match_longest_ref(
+            Bits<P> prefix) const noexcept {
+        detail::Node<N>* node = &roots_.root(prefix);
+
+        std::optional<std::pair<uint8_t, T*>> longest;
+        uint8_t offset = Iar::iar_size;
+        auto const update_longest = [&longest, &offset](auto node, auto slice) {
+            uint8_t vec_idx = 0;
+            if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
+                longest = std::pair{static_cast<uint8_t>(offset + len.value()),
+#if __cplusplus >= 202300L
+                                    std::start_lifetime_as<T>(&detail::NodeVec{
+                                            node.children,
+                                            node.external_bitmap.total(),
+                                            static_cast<uint8_t>(vec_idx + 1)}
+                                                                       .value(vec_idx))
+#else
+                                    reinterpret_cast<T*>(&detail::NodeVec{
+                                            node.children,
+                                            node.external_bitmap.total(),
+                                            static_cast<uint8_t>(vec_idx + 1)}
+                                                                  .value(vec_idx)) // UB! OK if strict aliasing is off
+#endif
                 };
             }
             offset += detail::Stride<N>::bits_count;
