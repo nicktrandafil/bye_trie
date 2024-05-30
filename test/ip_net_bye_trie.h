@@ -22,15 +22,18 @@
   SOFTWARE.
 */
 
-#include "bye_trie.h"
-#include "uint128.h"
+#include <bye_trie/bye_trie.h>
 
 #include <boost/asio/ip/network_v4.hpp>
 #include <boost/asio/ip/network_v6.hpp>
 
 #include <ostream>
+#include <utility>
 
 namespace bye_trie {
+
+using Uint128 = __uint128_t;
+
 namespace detail {
 
 // clang-format off
@@ -85,56 +88,70 @@ inline Uint128 reverse_bits_of_bytes(
     return std::bit_cast<Uint128>(val);
 }
 
+Bits<uint32_t> to_bits(boost::asio::ip::network_v4 prefix) noexcept {
+    return Bits<uint32_t>{reverse_bits_of_bytes(prefix.network().to_bytes()),
+                          static_cast<uint8_t>(prefix.prefix_length())};
+};
+
+boost::asio::ip::network_v4 to_network(Bits<uint32_t> bits) noexcept {
+    using namespace boost::asio::ip;
+    return make_network_v4(
+            address_v4(std::bit_cast<address_v4::bytes_type>(reverse_bits_of_bytes(
+                    std::bit_cast<address_v4::bytes_type>(bits.bits())))),
+            bits.len());
+}
+
+Bits<Uint128> to_bits(boost::asio::ip::network_v6 prefix) noexcept {
+    return Bits<Uint128>{reverse_bits_of_bytes(prefix.network().to_bytes()),
+                         static_cast<uint8_t>(prefix.prefix_length())};
+};
+
+boost::asio::ip::network_v6 to_network(Bits<Uint128> bits) noexcept {
+    using namespace boost::asio::ip;
+    return make_network_v6(
+            address_v6(std::bit_cast<address_v6::bytes_type>(reverse_bits_of_bytes(
+                    std::bit_cast<address_v6::bytes_type>(bits.bits())))),
+            bits.len());
+}
+
 } // namespace detail
 
 inline constexpr uint8_t stride = 5;
 
-template <class PrefixType, UnsignedIntegral IntType, TrivialLittleObject T>
+template <class IpNet, UnsignedIntegral IntType, TrivialLittleObject T>
 class IpNetSubsIterator {
     using Inner = SubsIterator<IntType, T, stride>;
 
 public:
-    explicit IpNetSubsIterator(Inner&& x) noexcept(false)
+    explicit IpNetSubsIterator(Inner&& x)
             : inner{x} {
     }
 
-    using iterator_category = std::input_iterator_tag;
-    using value_type = struct value_type {
-        bool operator==(value_type const& rhs) const noexcept = default;
-
-        friend std::ostream& operator<<(std::ostream& os, value_type const& rhs) {
-            return os << "{ prefix: " << rhs.prefix << "; " << " value: " << rhs.value
-                      << "}";
-        }
-
-        PrefixType prefix;
-        T value;
-    };
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = T;
     using difference_type = std::ptrdiff_t;
-    using pointer = value_type const*;
-    using reference = value_type;
+    using pointer = value_type*;
+    using reference = value_type&;
 
-    reference operator*() const noexcept {
-        using AddressType = decltype(std::declval<PrefixType>().address());
-        using BytesType = typename AddressType::bytes_type;
-        auto const val = *inner;
-        return value_type{
-                PrefixType(AddressType(
-                                   std::bit_cast<BytesType>(detail::reverse_bits_of_bytes(
-                                           std::bit_cast<BytesType>(val.prefix.bits())))),
-                           val.prefix.len()),
-                val.value,
-        };
+    IpNet key() const {
+        auto const inner_key = inner.key();
+        return detail::to_network(inner_key);
     }
 
-    IpNetSubsIterator& operator++() noexcept(false) {
+    reference operator*() {
+        return *inner;
+    }
+
+    pointer operator->() const {
+        return inner.operator->();
+    }
+
+    IpNetSubsIterator& operator++() {
         ++inner;
         return *this;
     }
 
-    bool operator==(IpNetSubsIterator const& rhs) const noexcept {
-        return inner == rhs.inner;
-    }
+    bool operator==(IpNetSubsIterator const& rhs) const = default;
 
 private:
     Inner inner;
@@ -143,62 +160,46 @@ private:
 template <class PrefixType, UnsignedIntegral P, TrivialLittleObject T>
 class IpNetByeTrieSubs {
 public:
-    using ValueType = typename IpNetSubsIterator<PrefixType, P, T>::value_type;
-
-    explicit IpNetByeTrieSubs(ByeTrieSubs<P, T, stride>&& inner) noexcept(false)
-            : inner{std::move(inner)} {
+    explicit IpNetByeTrieSubs(ByeTrieSubs<P, T, stride>&& inner)
+            : begin_{std::move(inner).begin()}
+            , end_{SubsIterator<P, T, stride>(std::move(inner).end())} {
     }
 
-    IpNetSubsIterator<PrefixType, P, T> begin() const noexcept(false) {
-        return IpNetSubsIterator<PrefixType, P, T>{inner.begin()};
+    IpNetSubsIterator<PrefixType, P, T> begin() const {
+        return begin_;
     }
 
-    IpNetSubsIterator<PrefixType, P, T> end() const noexcept(false) {
-        return IpNetSubsIterator<PrefixType, P, T>{inner.end()};
+    IpNetSubsIterator<PrefixType, P, T> const& end() const {
+        return end_;
     }
 
 private:
-    ByeTrieSubs<P, T, stride> inner;
+    IpNetSubsIterator<PrefixType, P, T> begin_;
+    IpNetSubsIterator<PrefixType, P, T> end_;
 };
 
-template <class IpNetType, UnsignedIntegral IntType, class T, class Allocator>
+template <class IpNet, UnsignedIntegral IntType, class T, class Allocator>
 class IpNetByeTrie : private ByeTrie<IntType, T, Allocator, stride> {
     using Base = ByeTrie<IntType, T, Allocator, stride>;
-
-    using IpNetTypeCopyOptimized =
-            std::conditional_t<sizeof(IpNetType) <= 16, IpNetType, IpNetType const&>;
 
 public:
     using Base::Base;
     using Base::size;
 
-    auto insert(IpNetTypeCopyOptimized prefix,
-                T value) noexcept(noexcept(static_cast<Base*>(this)->insert({}, {}))) {
-        return Base::insert(
-                Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
-                     static_cast<uint8_t>(prefix.prefix_length())},
-                value);
+    auto insert(IpNet const& prefix, T value) {
+        return Base::insert(detail::to_bits(prefix), value);
     }
 
-    auto replace(IpNetTypeCopyOptimized prefix,
-                 T value) noexcept(noexcept(static_cast<Base*>(this)->replace({}, {}))) {
-        return Base::replace(
-                Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
-                     static_cast<uint8_t>(prefix.prefix_length())},
-                value);
+    auto replace(IpNet const& prefix, T value) {
+        return Base::replace(detail::to_bits(prefix), value);
     }
 
-    auto match_exact(IpNetTypeCopyOptimized prefix) const noexcept {
-        return Base::match_exact(
-                Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
-                     static_cast<uint8_t>(prefix.prefix_length())});
+    auto match_exact(IpNet const& prefix) const {
+        return Base::match_exact(detail::to_bits(prefix));
     }
 
-    std::optional<std::pair<IpNetType, T>> match_longest(
-            IpNetTypeCopyOptimized prefix) const noexcept {
-        auto const res = Base::match_longest(
-                Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
-                     static_cast<uint8_t>(prefix.prefix_length())});
+    std::optional<std::pair<IpNet, T>> match_longest(IpNet const& prefix) const {
+        auto const res = Base::match_longest(detail::to_bits(prefix));
 
         if (!res) {
             return std::nullopt;
@@ -206,19 +207,15 @@ public:
 
         auto const [prefix_length, value] = *res;
 
-        return std::pair{IpNetType{prefix.address(), prefix_length}, value};
+        return std::pair{IpNet{prefix.address(), prefix_length}, value};
     }
 
-    /// View to sub networks of `prefix`
-    auto subs(IpNetTypeCopyOptimized prefix) const noexcept(false) {
-        return IpNetByeTrieSubs<IpNetType, IntType, T>{Base::subs(
-                Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
-                     static_cast<uint8_t>(prefix.prefix_length())})};
+    auto subs(IpNet const& prefix) const {
+        return IpNetByeTrieSubs<IpNet, IntType, T>{Base::subs(detail::to_bits(prefix))};
     }
 
-    std::vector<Value<IpNetType, T>> supers(IpNetTypeCopyOptimized prefix) const
-            noexcept(false) {
-        std::vector<Value<IpNetType, T>> ret;
+    std::vector<std::pair<IpNet, T>> supers(IpNet const& prefix) const {
+        std::vector<std::pair<IpNet, T>> ret;
         ret.reserve(sizeof(IntType) * CHAR_BIT);
         visit_supers(prefix,
                      [&ret](auto prefix, auto v) { ret.emplace_back(prefix, v); });
@@ -227,21 +224,10 @@ public:
     }
 
     template <class F>
-    void visit_supers(IpNetTypeCopyOptimized prefix, F const& on_super) const
-            noexcept(false) {
-        using AddressType = decltype(std::declval<IpNetType>().address());
-        using BytesType = typename AddressType::bytes_type;
-        Base::visit_supers(
-                Bits{detail::reverse_bits_of_bytes(prefix.address().to_bytes()),
-                     static_cast<uint8_t>(prefix.prefix_length())},
-                [on_super](auto prefix, auto v) {
-                    on_super(IpNetType(AddressType(std::bit_cast<BytesType>(
-                                               detail::reverse_bits_of_bytes(
-                                                       std::bit_cast<BytesType>(
-                                                               prefix.bits())))),
-                                       prefix.len()),
-                             v);
-                });
+    void visit_supers(IpNet const& prefix, F const& on_super) const {
+        Base::visit_supers(detail::to_bits(prefix), [on_super](auto prefix, auto v) {
+            on_super(detail::to_network(prefix), v);
+        });
     }
 };
 

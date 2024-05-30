@@ -24,7 +24,7 @@
 
 #include "common.h"
 
-#include <bye_trie/ip_net_bye_trie.h>
+#include <ip_net_bye_trie.h>
 
 #include <chrono>
 #include <fstream>

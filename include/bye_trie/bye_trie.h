@@ -24,8 +24,6 @@
 
 #pragma once
 
-#include "uint128.h"
-
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -163,6 +161,8 @@ private:
     T bits_;
     uint8_t len_;
 };
+
+using Uint128 = __uint128_t;
 
 namespace detail {
 
@@ -610,8 +610,8 @@ public:
     }
 
     /// \throw Forwards `Alloc::realloc` exception
-    template <class Alloc>
-    ErasedNode<N>* insert_value(uint8_t i, void* value, Alloc& alloc) noexcept(
+    template <class Alloc, class T>
+    ErasedNode<N>* insert_value(uint8_t i, T value, Alloc& alloc) noexcept(
             noexcept(alloc.realloc(MemBlk{}, 0))) {
         assert(i <= values_count);
 
@@ -633,8 +633,8 @@ public:
                     bytes.end() - 1 * value_size,
                     bytes.end());
 
-        values[i / ErasedNode<N>::pointer_count]
-                .pointers[i % ErasedNode<N>::pointer_count] = value;
+        new (&values[i / ErasedNode<N>::pointer_count]
+                      .pointers[i % ErasedNode<N>::pointer_count]) T{value};
 
         return inner.data();
     }
@@ -837,10 +837,52 @@ inline constexpr uint8_t leaf_pos(Bits<T> prefix) noexcept {
                  : (prefix.len() - prefix.len() % detail::Stride<N>::bits_count);
 }
 
+template <class D, class S>
+D* as_ptr(S& ptr) noexcept
+    requires(sizeof(D) == sizeof(S))
+{
+    return
+#if __cplusplus >= 202300L
+            std::start_lifetime_as<D>(&ptr)
+#elif defined(bye_trie_STRICT_ALIASING)
+            new (ptr) T(std::bit_cast<D>(ptr));
+#else
+            reinterpret_cast<D*>(&ptr) // UB! OK if strict aliasing is off
+#endif
+                    ;
+}
+
+template <class D, class S>
+D* as_ptr(S& ptr) noexcept
+    requires(sizeof(D) != sizeof(S))
+{
+    return
+#if __cplusplus >= 202300L
+            std::start_lifetime_as<D>(&ptr)
+#else
+            reinterpret_cast<D*>(&ptr) // UB! OK if strict aliasing is off
+#endif
+                    ;
+}
+
+template <class D, class S>
+D as_value(S& x) noexcept
+    requires(sizeof(D) == sizeof(S))
+{
+    return std::bit_cast<D>(x);
+}
+
+template <class D, class S>
+D as_value(S& x) noexcept
+    requires(sizeof(D) < sizeof(S))
+{
+    return *as_ptr<D>(x);
+}
+
 } // namespace detail
 
 template <class T>
-concept TrivialLittleObject = std::is_trivial_v<T> && sizeof(T) == 8;
+concept TrivialLittleObject = std::is_trivial_v<T> && sizeof(T) <= 8;
 
 struct SystemAllocator {
     MemBlk realloc(MemBlk blk, size_t size) noexcept(false) {
@@ -882,24 +924,31 @@ Value(T1, T2) -> Value<T1, T2>;
 template <UnsignedIntegral P, TrivialLittleObject T, uint8_t N>
 class SubsIterator {
 public:
-    using iterator_category = std::input_iterator_tag;
-    using value_type = Value<Bits<P>, T>;
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = T;
     using difference_type = std::ptrdiff_t;
-    using pointer = value_type const*;
-    using reference = value_type;
+    using pointer = T*;
+    using reference = T&;
+
+    Bits<P> key() const noexcept {
+        auto const slice = this->fixed_bits.concatenated(value_iter_bits);
+        return this->prefix.concatenated(slice);
+    }
 
     reference operator*() const noexcept {
         auto const slice = this->fixed_bits.concatenated(value_iter_bits);
-        auto const prefix = this->prefix.concatenated(slice);
         uint8_t vec_idx = 0;
         auto const exists = node.internal_bitmap.exists(vec_idx, slice);
         assert(exists);
         static_cast<void>(exists);
-        return {prefix,
-                std::bit_cast<T>(detail::NodeVec{node.children,
-                                                 node.external_bitmap.total(),
-                                                 static_cast<uint8_t>(vec_idx + 1)}
-                                         .values()[vec_idx])};
+        return *detail::as_ptr<T>(detail::NodeVec{node.children,
+                                                  node.external_bitmap.total(),
+                                                  static_cast<uint8_t>(vec_idx + 1)}
+                                          .value(vec_idx));
+    }
+
+    pointer operator->() const noexcept {
+        return &**this;
     }
 
     /// \throw std::bad_alloc
@@ -953,10 +1002,9 @@ public:
                 ++child_iter_bits;
                 path.pop_back();
             } else {
-                break;
+                return *this;
             }
         }
-        return *this;
     }
 
     bool operator==(SubsIterator const& rhs) const noexcept {
@@ -1021,14 +1069,12 @@ private:
 template <UnsignedIntegral P, TrivialLittleObject T, uint8_t N = 5>
 class ByeTrieSubs {
 public:
-    using ValueType = typename SubsIterator<P, T, N>::value_type;
-
     SubsIterator<P, T, N> begin() const noexcept(false) {
         return begin_;
     }
 
-    SubsIterator<P, T, N> end() const noexcept(false) {
-        return begin_.one_past_end();
+    SubsIterator<P, T, N> const& end() const noexcept(false) {
+        return end_;
     }
 
 private:
@@ -1036,33 +1082,41 @@ private:
     friend class ByeTrie;
 
     explicit ByeTrieSubs(detail::Node<N> node, Bits<P> prefix) noexcept(false)
-            : begin_{SubsIterator<P, T, N>{node, prefix}} {
+            : begin_{SubsIterator<P, T, N>{node, prefix}}
+            , end_{begin_.one_past_end()} {
     }
 
 private:
     SubsIterator<P, T, N> begin_;
+    SubsIterator<P, T, N> end_;
 };
 
 template <UnsignedIntegral P, TrivialLittleObject T, uint8_t N>
 class ByeTrieIterator {
 public:
     using iterator_category = std::input_iterator_tag;
-    using value_type = Value<Bits<P>, T>;
+    using value_type = T;
     using difference_type = std::ptrdiff_t;
-    using pointer = value_type const*;
-    using reference = value_type;
+    using pointer = value_type*;
+    using reference = value_type&;
+
+    Bits<P> key() const noexcept {
+        return prefix.concatenated(value_iter_bits);
+    }
 
     reference operator*() const noexcept {
-        auto const prefix = this->prefix.concatenated(value_iter_bits);
         uint8_t vec_idx = 0;
         auto const exists = node.internal_bitmap.exists(vec_idx, value_iter_bits);
         assert(exists);
         static_cast<void>(exists);
-        return {prefix,
-                std::bit_cast<T>(detail::NodeVec{node.children,
-                                                 node.external_bitmap.total(),
-                                                 static_cast<uint8_t>(vec_idx + 1)}
-                                         .values()[vec_idx])};
+        return *detail::as_ptr<T>(detail::NodeVec{node.children,
+                                                  node.external_bitmap.total(),
+                                                  static_cast<uint8_t>(vec_idx + 1)}
+                                          .value(vec_idx));
+    }
+
+    pointer operator->() const noexcept {
+        return &**this;
     }
 
     bool next_super() noexcept {
@@ -1306,24 +1360,37 @@ public:
         detail::Node<N>* node = &roots_.root(prefix);
         find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
-        auto const prev = match_exact_or_insert(node, prefix, value);
-        return prev ? std::optional(std::bit_cast<T>(*prev)) : std::nullopt;
+        auto const res = match_exact_or_insert(node, prefix, value);
+        return res.second ? std::nullopt : std::optional(detail::as_value<T>(*res.first));
+    }
+
+    /// Insert only if the exact prefix is not present.
+    /// \post Strong exception guarantee
+    /// \return Existing value
+    /// \throw Forwards `Alloc::realloc` exception
+    std::pair<T*, bool> insert_ref(Bits<P> prefix,
+                                   T value) noexcept(noexcept(alloc_.realloc(MemBlk{},
+                                                                             0))) {
+        detail::Node<N>* node = &roots_.root(prefix);
+        find_leaf_branch(node, prefix, noop);
+        extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
+        auto const res = match_exact_or_insert(node, prefix, value);
+        return {detail::as_ptr<T>(*res.first), res.second};
     }
 
     /// Replace the exact prefix if present otherwise insert.
     /// \post Strong exception guarantee
     /// \return Previous value
-    /// \throw Forwards `Alloc::realloc` exception
     std::optional<T> replace(Bits<P> prefix,
                              T value) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
         detail::Node<N>* node = &roots_.root(prefix);
         find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
-        if (auto const old_value = match_exact_or_insert(node, prefix, value)) {
+        if (auto const res = match_exact_or_insert(node, prefix, value); !res.second) {
             using std::swap;
-            auto new_value = std::bit_cast<void*>(value);
-            swap(*old_value, new_value);
-            return std::bit_cast<T>(new_value);
+            auto tmp = detail::as_ptr<T>(*res.first);
+            swap(*tmp, value);
+            return value;
         } else {
             return std::nullopt;
         }
@@ -1343,10 +1410,10 @@ public:
             return std::nullopt;
         }
 
-        return std::bit_cast<T>(detail::NodeVec{node->children,
-                                                node->external_bitmap.total(),
-                                                static_cast<uint8_t>(vec_idx + 1)}
-                                        .value(vec_idx));
+        return detail::as_value<T>(detail::NodeVec{node->children,
+                                                   node->external_bitmap.total(),
+                                                   static_cast<uint8_t>(vec_idx + 1)}
+                                           .value(vec_idx));
     }
 
     T* match_exact_ref(Bits<P> prefix) const noexcept {
@@ -1413,7 +1480,7 @@ public:
             if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
                 longest = std::pair{
                         static_cast<uint8_t>(offset + len.value()),
-                        std::bit_cast<T>(
+                        detail::as_value<T>(
                                 detail::NodeVec{node.children,
                                                 node.external_bitmap.total(),
                                                 static_cast<uint8_t>(vec_idx + 1)}
@@ -1507,34 +1574,37 @@ public:
 
     /// Erase exact prefix.
     /// \throw Forwards `Alloc::realloc` exception
-    bool erase_exact(Bits<P> prefix) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
+    std::optional<T> erase_exact(Bits<P> prefix) noexcept(
+            noexcept(alloc_.realloc(MemBlk{}, 0))) {
         detail::Node<N>* node = &roots_.root(prefix);
         auto reminder = prefix;
 
         find_leaf_branch(node, reminder, noop);
         if (reminder.len() > detail::Stride<N - 1>::bits_count) {
-            return false;
+            return std::nullopt;
         }
 
         uint8_t vec_idx;
         if (!node->internal_bitmap.exists(vec_idx, reminder)) {
-            return false;
+            return std::nullopt;
         }
 
         detail::NodeVec vec{node->children,
                             node->external_bitmap.total(),
                             node->internal_bitmap.total()};
 
+        auto const ret = detail::as_value<T>(vec.value(vec_idx));
+
         if (vec.size() < 2) [[unlikely]] {
             erase_cleaning(prefix);
-            return true;
+            return ret;
         }
 
         vec.erase_value(vec_idx, alloc_);
         node->children = vec.data();
         node->internal_bitmap.unset(reminder);
         size_ -= 1;
-        return true;
+        return ret;
     }
 
     size_t size() const noexcept {
@@ -1580,11 +1650,11 @@ public:
         return ByeTrieSubs<P, T, N>{*node, prefix};
     }
 
-    /// Visit super networks of `prefix` with `on_super(Bits, T)`
+    /// Visit super networks of `prefix` with `on_super(Bits, T&)`
     /// \throw forwards `on_super` exception
     template <class F>
     void visit_supers(Bits<P> prefix, F const& on_super) const
-            noexcept(noexcept(on_super(std::declval<Bits<P>>(), std::declval<T>()))) {
+            noexcept(noexcept(on_super(std::declval<Bits<P>>(), std::declval<T&>()))) {
         auto suffix = prefix;
         detail::Node<N>* node = &roots_.root(suffix);
 
@@ -1594,7 +1664,7 @@ public:
                 uint8_t vec_idx = 0;
                 if (node.internal_bitmap.exists(vec_idx, reminder.prefix(len))) {
                     on_super(prefix.sub(0, offset + len),
-                             std::bit_cast<T>(
+                             *detail::as_ptr<T>(
                                      detail::NodeVec{node.children,
                                                      node.external_bitmap.total(),
                                                      static_cast<uint8_t>(vec_idx + 1)}
@@ -1663,10 +1733,10 @@ private:
 
     /// \post Strong exception guarantee
     /// \throw Forwards `Alloc::realloc` exception
-    void** match_exact_or_insert(detail::Node<N>*& node,
-                                 Bits<P> prefix,
-                                 T value) noexcept(noexcept(alloc_.realloc(MemBlk{},
-                                                                           0))) {
+    std::pair<void**, bool> match_exact_or_insert(
+            detail::Node<N>*& node,
+            Bits<P> prefix,
+            T value) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
         detail::NodeVec vec{
                 node->children,
                 node->external_bitmap.total(),
@@ -1675,15 +1745,15 @@ private:
 
         uint8_t vec_idx = 0;
         if (node->internal_bitmap.exists(vec_idx, prefix)) {
-            return &vec.value(vec_idx);
+            return {&vec.value(vec_idx), false};
         }
 
-        node->children =
-                std::move(vec).insert_value(vec_idx, std::bit_cast<void*>(value), alloc_);
+        node->children = std::move(vec).insert_value(vec_idx, value, alloc_);
         node->internal_bitmap.set(prefix);
 
         size_ += 1;
-        return nullptr;
+
+        return {&vec.value(vec_idx), true};
     }
 
     /// \pre Exists

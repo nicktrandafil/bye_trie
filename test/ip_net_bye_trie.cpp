@@ -22,7 +22,7 @@
   SOFTWARE.
 */
 
-#include "bye_trie/ip_net_bye_trie.h"
+#include "ip_net_bye_trie.h"
 
 #include <catch2/catch_all.hpp>
 
@@ -77,20 +77,20 @@ TEST_CASE(
 TEST_CASE("Indirect testing of IteratorV4::operator*()", "[white-box]") {
     SECTION("ByeTrieV4") {
         ByeTrieV4<long> trie;
-        using Value = ByeTrieSubsV4<long>::ValueType;
         REQUIRE(trie.insert(make_network_v4("25.0.0.0/8"), 1) == std::nullopt);
 
-        REQUIRE(*trie.subs(make_network_v4("25.1.0.0/8")).begin()
-                == Value{.prefix = make_network_v4("25.0.0.0/8"), .value = 1});
+        REQUIRE(trie.subs(make_network_v4("25.1.0.0/8")).begin().key()
+                == make_network_v4("25.0.0.0/8"));
+        REQUIRE(*trie.subs(make_network_v4("25.1.0.0/8")).begin() == 1);
     }
 
     SECTION("ByeTrieV6") {
         ByeTrieV6<long> trie;
-        using Value = ByeTrieSubsV6<long>::ValueType;
         REQUIRE(trie.insert(make_network_v6("::/0"), 1) == std::nullopt);
 
-        REQUIRE(*trie.subs(make_network_v6("::/0")).begin()
-                == Value{.prefix = make_network_v6("::/0"), .value = 1});
+        REQUIRE(trie.subs(make_network_v6("::/0")).begin().key()
+                == make_network_v6("::/0"));
+        REQUIRE(*trie.subs(make_network_v6("::/0")).begin() == 1);
     }
 }
 
@@ -102,7 +102,7 @@ TEST_CASE("Visit super nets", "") {
         trie.insert(make_network_v4("25.2.0.0/16"), 3);
         trie.insert(make_network_v4("25.1.2.0/24"), 4);
 
-        std::vector<Value<boost::asio::ip::network_v4, long>> actual,
+        std::vector<std::pair<boost::asio::ip::network_v4, long>> actual,
                 expected{{make_network_v4("25.0.0.0/8"), 1},
                          {make_network_v4("25.1.0.0/16"), 2},
                          {make_network_v4("25.1.2.0/24"), 4}};
@@ -124,7 +124,7 @@ TEST_CASE("Visit super nets", "") {
         trie.insert(make_network_v6("::2:0:0:0/80"), 3);
         trie.insert(make_network_v6("::1:2:0:0/96"), 4);
 
-        std::vector<Value<boost::asio::ip::network_v6, long>> actual,
+        std::vector<std::pair<boost::asio::ip::network_v6, long>> actual,
                 expected{{make_network_v6("::/0"), 1},
                          {make_network_v6("::1:0:0:0/80"), 2},
                          {make_network_v6("::1:2:0:0/96"), 4}};
