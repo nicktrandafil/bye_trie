@@ -452,7 +452,17 @@ TEMPLATE_LIST_TEST_CASE("Match exact prefixes", "[ByeTrie][match_exact]", Ns) {
     }
 }
 
-TEMPLATE_LIST_TEST_CASE("Match longest prefixes", "[ByeTrie][match_longest]", Ns) {
+TEST_CASE("", "[ByeTrie][match_exact_ref]") {
+    bye_trie::ByeTrie<uint32_t, long> trie;
+
+    SECTION("basic") {
+        trie.insert(Bits{0u, 4}, 0);
+        *trie.match_exact_ref(Bits{0u, 4}) = 1;
+        REQUIRE(*trie.match_exact(Bits{0u, 4}) == 1);
+    }
+}
+
+TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][match_longest]", Ns) {
     bye_trie::ByeTrie<uint32_t, long, SystemAllocator, TestType{}> trie;
     trie.insert(Bits{0b0000u, 4}, 0);
     trie.insert(Bits{0b001u, 3}, 1);
@@ -487,6 +497,16 @@ TEMPLATE_LIST_TEST_CASE("Match longest prefixes", "[ByeTrie][match_longest]", Ns
     SECTION("negative basic") {
         REQUIRE(!trie.match_longest(Bits{0b00010u, 5}));
         REQUIRE(!trie.match_longest(Bits{0b11000u, 5}));
+    }
+}
+
+TEST_CASE("", "[ByeTrie][match_longest_ref]") {
+    bye_trie::ByeTrie<uint32_t, long> trie;
+
+    SECTION("basic") {
+        trie.insert(Bits{0u, 4}, 0);
+        *trie.match_longest_ref(Bits{0u, 5})->second = 1;
+        REQUIRE(trie.match_longest(Bits{0u, 5})->second == 1);
     }
 }
 
@@ -799,56 +819,6 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][ByeTrieIterator]", Ns) {
                                           Value{Bits{001u, 3}, 4}};
         REQUIRE(actual == expected);
 
-        SECTION("match_exact_iter, total ordering") {
-            auto mid = trie.match_exact_iter(Bits{000u, 3});
-            std::vector<Value> range1;
-            // todo: use subrange
-            for (auto it = trie.begin(); it != mid; ++it) {
-                range1.push_back(*it);
-            }
-            REQUIRE(range1
-                    == (std::vector{Value{Bits{0u, 0}, 1}, Value{Bits{11u, 2}, 2}}));
-            std::vector<Value> range2;
-            // todo: use subrange
-            for (auto it = mid; it != trie.end(); ++it) {
-                range2.push_back(*it);
-            }
-            REQUIRE(range2
-                    == (std::vector{Value{Bits{000u, 3}, 3}, Value{Bits{001u, 3}, 4}}));
-        }
-
-        SECTION("match_longest_iter, total ordering") {
-            trie.insert(Bits{0000u, 5}, 5);
-            auto mid = trie.match_longest_iter(Bits{0000u, 4});
-            std::vector<Value> range1;
-            // todo: use subrange
-            for (auto it = trie.begin(); it != mid; ++it) {
-                range1.push_back(*it);
-            }
-            REQUIRE(range1
-                    == (std::vector{Value{Bits{0u, 0}, 1}, Value{Bits{11u, 2}, 2}}));
-            std::vector<Value> range2;
-            // todo: use subrange
-            for (auto it = mid; it != trie.end(); ++it) {
-                range2.push_back(*it);
-            }
-            if constexpr (TestType{} == 3) {
-                REQUIRE(range2
-                        == (std::vector{
-                                Value{Bits{000u, 3}, 3},
-                                Value{Bits{00000u, 5}, 5},
-                                Value{Bits{001u, 3}, 4},
-                        }));
-            } else {
-                REQUIRE(range2
-                        == (std::vector{
-                                Value{Bits{000u, 3}, 3},
-                                Value{Bits{001u, 3}, 4},
-                                Value{Bits{00000u, 5}, 5},
-                        }));
-            }
-        }
-
         SECTION("supers") {
             trie.insert(Bits{0000u, 5}, 5);
             auto it = trie.match_longest_iter(Bits{0000u, 5});
@@ -863,6 +833,92 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][ByeTrieIterator]", Ns) {
                             Value{Bits{0u, 0}, 1},
                     }));
         }
+    }
+}
+
+TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][match_exact_iter]", Ns) {
+    using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, TestType{}>;
+    using Value = ByeTrieSubs<uint32_t, long, TestType{}>::ValueType;
+
+    ByeTrie trie;
+
+    trie.insert(Bits{0u, 0}, 1);
+    trie.insert(Bits{11u, 2}, 2);
+    trie.insert(Bits{000u, 3}, 3);
+    trie.insert(Bits{001u, 3}, 4);
+
+    SECTION("total ordering") {
+        auto mid = trie.match_exact_iter(Bits{000u, 3});
+        std::vector<Value> range1;
+        // todo: use subrange
+        for (auto it = trie.begin(); it != mid; ++it) {
+            range1.push_back(*it);
+        }
+        REQUIRE(range1 == (std::vector{Value{Bits{0u, 0}, 1}, Value{Bits{11u, 2}, 2}}));
+        std::vector<Value> range2;
+        // todo: use subrange
+        for (auto it = mid; it != trie.end(); ++it) {
+            range2.push_back(*it);
+        }
+        REQUIRE(range2
+                == (std::vector{Value{Bits{000u, 3}, 3}, Value{Bits{001u, 3}, 4}}));
+    }
+
+    SECTION("no match") {
+        REQUIRE(trie.match_exact_iter(Bits{0u, 1}) == trie.end());
+    }
+}
+
+TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][match_longest_iter]", Ns) {
+    using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, TestType{}>;
+    using Value = ByeTrieSubs<uint32_t, long, TestType{}>::ValueType;
+
+    ByeTrie trie;
+
+    trie.insert(Bits{0u, 0}, 1);
+    trie.insert(Bits{11u, 2}, 2);
+    trie.insert(Bits{000u, 3}, 3);
+    trie.insert(Bits{001u, 3}, 4);
+    trie.insert(Bits{0000u, 5}, 5);
+
+    SECTION("total ordering") {
+        auto mid = trie.match_longest_iter(Bits{0000u, 4});
+        std::vector<Value> range1;
+        // todo: use subrange
+        for (auto it = trie.begin(); it != mid; ++it) {
+            range1.push_back(*it);
+        }
+        REQUIRE(range1 == (std::vector{Value{Bits{0u, 0}, 1}, Value{Bits{11u, 2}, 2}}));
+        std::vector<Value> range2;
+        // todo: use subrange
+        for (auto it = mid; it != trie.end(); ++it) {
+            range2.push_back(*it);
+        }
+        if constexpr (TestType{} == 3) {
+            REQUIRE(range2
+                    == (std::vector{
+                            Value{Bits{000u, 3}, 3},
+                            Value{Bits{00000u, 5}, 5},
+                            Value{Bits{001u, 3}, 4},
+                    }));
+        } else {
+            REQUIRE(range2
+                    == (std::vector{
+                            Value{Bits{000u, 3}, 3},
+                            Value{Bits{001u, 3}, 4},
+                            Value{Bits{00000u, 5}, 5},
+                    }));
+        }
+    }
+
+    SECTION("0/0 last resort") {
+        REQUIRE(trie.match_longest_iter(Bits{0u, 1}) == trie.begin());
+        REQUIRE(*trie.match_longest_iter(Bits{0u, 1}) == Value{Bits{0u, 0}, 1});
+    }
+
+    SECTION("no match") {
+        trie.erase_exact(Bits{0u, 0});
+        REQUIRE(trie.match_longest_iter(Bits{1u, 1}) == trie.end());
     }
 }
 
