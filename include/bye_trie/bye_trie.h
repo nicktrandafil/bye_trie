@@ -1065,6 +1065,33 @@ public:
                                          .values()[vec_idx])};
     }
 
+    bool next_super() noexcept {
+        while (true) {
+            // subs in current node
+            for (auto len = static_cast<uint8_t>(value_iter_bits.len() - 1); len != 255;
+                 --len) {
+                static_assert(std::is_same_v<uint8_t, decltype(len)>);
+                value_iter_bits = value_iter_bits.prefix(len);
+                uint8_t vec_idx;
+                if (node.internal_bitmap.exists(vec_idx, value_iter_bits)) {
+                    return true;
+                }
+            }
+
+            // go to parent node
+            if (!path.empty()) {
+                value_iter_bits =
+                        prefix.suffix(prefix.len() - detail::Stride<N>::bits_count);
+                node = path.back().node;
+                prefix = path.back().prefix;
+                child_iter_bits = Bits<P>{0, detail::Stride<N>::bits_count};
+                path.pop_back();
+            } else {
+                return false;
+            }
+        }
+    }
+
     /// \throw std::bad_alloc
     ByeTrieIterator& operator++() noexcept(false) {
         ++value_iter_bits;
@@ -1106,8 +1133,7 @@ public:
                 node = path.back().node;
                 prefix = path.back().prefix;
                 value_iter_bits = Bits<P>(0, detail::Stride<N>::bits_count);
-                child_iter_bits = path.back().child_iter_bits; // todo: we might as well
-                                                               // set this to one past end
+                child_iter_bits = path.back().child_iter_bits;
                 ++child_iter_bits;
                 path.pop_back();
             } else {

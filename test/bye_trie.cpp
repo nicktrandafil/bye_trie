@@ -848,6 +848,21 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][ByeTrieIterator]", Ns) {
                         }));
             }
         }
+
+        SECTION("supers") {
+            trie.insert(Bits{0000u, 5}, 5);
+            auto it = trie.match_longest_iter(Bits{0000u, 5});
+            std::vector<Value> range1;
+            do {
+                range1.push_back(*it);
+            } while (it.next_super());
+            REQUIRE(range1
+                    == (std::vector{
+                            Value{Bits{0000u, 5}, 5},
+                            Value{Bits{000u, 3}, 3},
+                            Value{Bits{0u, 0}, 1},
+                    }));
+        }
     }
 }
 
