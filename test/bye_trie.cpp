@@ -551,7 +551,7 @@ TEMPLATE_LIST_TEST_CASE("Erase values", "[ByeTrie][erase_exact]", Ns) {
         REQUIRE(trie.size() == 1);
         REQUIRE(*trie.match_exact(Bits{0b0'00000u, 6}) == 1);
     }
-    SECTION("bug case of confusion of external bitmap index in unfold-cleaning") {
+    SECTION("Bug case of confusion of external bitmap index in unfold-cleaning") {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{0b0'00001'00000u, 11}, 0);
         trie.insert(Bits{0b0'00000u, 6}, 1);
@@ -571,7 +571,7 @@ TEMPLATE_LIST_TEST_CASE("Erase values", "[ByeTrie][erase_exact]", Ns) {
         REQUIRE(trie.erase_exact(Bits{0b0001u, 4}));
         REQUIRE(trie.size() == 0);
     }
-    SECTION("node vec index is not equal to stride_m_1") {
+    SECTION("Node vec index is not equal to stride_m_1") {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{1u, 2}, 0);
         trie.insert(Bits{2u, 2}, 1);
