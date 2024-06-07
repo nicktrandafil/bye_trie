@@ -1335,8 +1335,9 @@ public:
             , roots_{} {
     }
 
-    ByeTrie(const ByeTrie&) = delete;
-    ByeTrie& operator=(const ByeTrie&) = delete;
+    ByeTrie(ByeTrie const&) = delete;
+
+    ByeTrie& operator=(ByeTrie const&) = delete;
 
     ByeTrie(ByeTrie&& rhs) noexcept
             : roots_{rhs.roots_}
@@ -1429,16 +1430,10 @@ public:
             return nullptr;
         }
 
-        auto& val = detail::NodeVec{node->children,
-                                    node->external_bitmap.total(),
-                                    static_cast<uint8_t>(vec_idx + 1)}
-                            .value(vec_idx);
-
-#if __cplusplus >= 202300L
-        return std::start_lifetime_as<T>(&val);
-#else
-        return reinterpret_cast<T*>(&val); // UB! OK if strict aliasing is off
-#endif
+        return detail::as_ptr<T>(detail::NodeVec{node->children,
+                                                 node->external_bitmap.total(),
+                                                 static_cast<uint8_t>(vec_idx + 1)}
+                                         .value(vec_idx));
     }
 
     /// Match exact prefix returning iterator.
@@ -1449,8 +1444,8 @@ public:
         detail::Node<N>* node = &roots_.root(suffix);
 
         std::vector<detail::Node<N>> path;
-        auto const visit = [&path](auto node, auto) { path.push_back(node); };
-        find_leaf_branch(node, suffix, visit);
+        find_leaf_branch(
+                node, suffix, [&path](auto node, auto) { path.push_back(node); });
 
         if (suffix.len() > detail::Stride<N - 1>::bits_count) {
             return end();
@@ -1508,20 +1503,11 @@ public:
             uint8_t vec_idx = 0;
             if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
                 longest = std::pair{static_cast<uint8_t>(offset + len.value()),
-#if __cplusplus >= 202300L
-                                    std::start_lifetime_as<T>(&detail::NodeVec{
+                                    detail::as_ptr<T>(detail::NodeVec{
                                             node.children,
                                             node.external_bitmap.total(),
                                             static_cast<uint8_t>(vec_idx + 1)}
-                                                                       .value(vec_idx))
-#else
-                                    reinterpret_cast<T*>(&detail::NodeVec{
-                                            node.children,
-                                            node.external_bitmap.total(),
-                                            static_cast<uint8_t>(vec_idx + 1)}
-                                                                  .value(vec_idx)) // UB! OK if strict aliasing is off
-#endif
-                };
+                                                              .value(vec_idx))};
             }
             offset += detail::Stride<N>::bits_count;
         };
@@ -1718,8 +1704,8 @@ private:
                      Bits<P>& prefix) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
         while (prefix.len() >= detail::Stride<N>::bits_count) {
             auto const slice = prefix.prefix(detail::Stride<N>::bits_count);
-            auto const vec_idx = node->external_bitmap.before(slice);
 
+            auto const vec_idx = node->external_bitmap.before(slice);
             node->children = detail::NodeVec{node->children,
                                              node->external_bitmap.total(),
                                              node->internal_bitmap.total()}
