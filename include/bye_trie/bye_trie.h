@@ -98,6 +98,7 @@ public:
 
     Bits prefix(uint8_t len) const noexcept {
         assert(len < int_bit_count);
+        assert(len <= this->len_);
         return Bits{(bits_ & ((T(1) << len) - 1)), len};
     }
 
@@ -879,6 +880,52 @@ D as_value(S& x) noexcept
     return *as_ptr<D>(x);
 }
 
+template <UnsignedIntegral P, uint8_t N>
+inline void find_leaf_branch(detail::Node<N>*& node,
+                             Bits<P>& prefix,
+                             auto on_node) noexcept {
+    while (prefix.len() >= detail::Stride<N>::bits_count) {
+        auto const slice = prefix.prefix(detail::Stride<N>::bits_count);
+        on_node(*node, slice);
+        if (node->external_bitmap.exists(slice)) {
+            auto const vec_idx = node->external_bitmap.before(slice);
+            node = &node->children[vec_idx].node;
+        } else {
+            break;
+        }
+        prefix = prefix.suffix(detail::Stride<N>::bits_count);
+    }
+}
+
+template <UnsignedIntegral P, uint8_t N>
+void match_longest(std::optional<std::pair<uint8_t, detail::Node<N>>>& longest,
+                   std::vector<detail::Node<N>>& path,
+                   Node<N> start,
+                   Bits<P> suffix) noexcept(false) {
+    auto const update_longest = [&longest, &path](auto node, auto slice) {
+        uint8_t vec_idx = 0;
+        if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
+            longest = std::pair{detail::Stride<N>::bits_count * path.size() + len.value(),
+                                node};
+        }
+    };
+    auto const visit_node = [&path, update_longest](auto node, auto slice) {
+        update_longest(node, slice.prefix(slice.len() - 1));
+        path.push_back(node);
+    };
+
+    detail::Node<N>* node = &start;
+    detail::find_leaf_branch(node, suffix, visit_node);
+    if (suffix.len() < detail::Stride<N>::bits_count) {
+        update_longest(*node, suffix);
+    }
+
+    if (longest.has_value()) {
+        auto const longest_idx = longest->first / detail::Stride<N>::bits_count;
+        path.erase(path.begin() + longest_idx, path.end());
+    }
+}
+
 } // namespace detail
 
 template <class T>
@@ -905,21 +952,6 @@ concept Allocator = std::is_nothrow_move_constructible_v<T>
                         { alloc.dealloc(MemBlk{}) };
                         noexcept(alloc.dealloc(MemBlk{}));
                     };
-
-template <class T1, class T2>
-struct Value {
-    bool operator==(Value const& rhs) const noexcept = default;
-
-    friend std::ostream& operator<<(std::ostream& os, Value const& x) {
-        return os << "Value{" << x.prefix << ", " << x.value << "}";
-    }
-
-    T1 prefix;
-    T2 value;
-};
-
-template <class T1, class T2>
-Value(T1, T2) -> Value<T1, T2>;
 
 template <UnsignedIntegral P, TrivialLittleObject T, uint8_t N>
 class SubsIterator {
@@ -1012,6 +1044,42 @@ public:
             && fixed_bits.concatenated(value_iter_bits)
                        == rhs.fixed_bits.concatenated(rhs.value_iter_bits)
             && child_iter_bits == rhs.child_iter_bits;
+    }
+
+    void go_to_longest(Bits<P> prefix) noexcept(false) {
+        // validate the prefix is within current branch
+        assert([&] {
+            auto const current_slice = fixed_bits.concatenated(value_iter_bits);
+            auto const current_prefix = this->prefix.concatenated(current_slice);
+            assert(prefix.len() >= current_prefix.len());
+            auto const common = prefix.prefix(current_prefix.len());
+            return common == current_prefix;
+        }());
+
+        // find longest starting with current node
+        auto const suffix = prefix.suffix(this->prefix.len());
+        std::optional<std::pair<uint8_t, detail::Node<N>>> longest;
+        std::vector<detail::Node<N>> path;
+        detail::match_longest<P, N>(longest, path, node, suffix);
+
+        // at least current node as of pre-requirements
+        assert(longest.has_value());
+
+        // populate path
+        for (auto const node : path) {
+            auto const slice =
+                    prefix.sub(this->prefix.len(), detail::Stride<N>::bits_count);
+            this->path.emplace_back(
+                    node, this->prefix, fixed_bits, slice.suffix(fixed_bits.len()));
+            this->prefix = this->prefix.concatenated(slice);
+            this->fixed_bits = {};
+        }
+
+        // set current
+        node = longest->second;
+        value_iter_bits = prefix.sub(this->prefix.len(),
+                                     longest->first % detail::Stride<N>::bits_count)
+                                  .suffix(fixed_bits.len());
     }
 
 private:
@@ -1360,7 +1428,7 @@ public:
     std::optional<T> insert(Bits<P> prefix,
                             T value) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
         detail::Node<N>* node = &roots_.root(prefix);
-        find_leaf_branch(node, prefix, noop);
+        detail::find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
         auto const res = match_exact_or_insert(node, prefix, value);
         return res.second ? std::nullopt : std::optional(detail::as_value<T>(*res.first));
@@ -1374,7 +1442,7 @@ public:
                                    T value) noexcept(noexcept(alloc_.realloc(MemBlk{},
                                                                              0))) {
         detail::Node<N>* node = &roots_.root(prefix);
-        find_leaf_branch(node, prefix, noop);
+        detail::find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
         auto const res = match_exact_or_insert(node, prefix, value);
         return {detail::as_ptr<T>(*res.first), res.second};
@@ -1386,7 +1454,7 @@ public:
     std::optional<T> replace(Bits<P> prefix,
                              T value) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
         detail::Node<N>* node = &roots_.root(prefix);
-        find_leaf_branch(node, prefix, noop);
+        detail::find_leaf_branch(node, prefix, noop);
         extend_leaf(node, prefix); // no-payload leaf on exception, but it's ok
         if (auto const res = match_exact_or_insert(node, prefix, value); !res.second) {
             using std::swap;
@@ -1402,7 +1470,7 @@ public:
     std::optional<T> match_exact(Bits<P> prefix) const noexcept {
         detail::Node<N>* node = &roots_.root(prefix);
 
-        find_leaf_branch(node, prefix, noop);
+        detail::find_leaf_branch(node, prefix, noop);
         if (prefix.len() > detail::Stride<N - 1>::bits_count) {
             return std::nullopt;
         }
@@ -1421,7 +1489,7 @@ public:
     T* match_exact_ref(Bits<P> prefix) const noexcept {
         detail::Node<N>* node = &roots_.root(prefix);
 
-        find_leaf_branch(node, prefix, noop);
+        detail::find_leaf_branch(node, prefix, noop);
         if (prefix.len() > detail::Stride<N - 1>::bits_count) {
             return nullptr;
         }
@@ -1445,7 +1513,7 @@ public:
         detail::Node<N>* node = &roots_.root(suffix);
 
         std::vector<detail::Node<N>> path;
-        find_leaf_branch(
+        detail::find_leaf_branch(
                 node, suffix, [&path](auto node, auto) { path.push_back(node); });
 
         if (suffix.len() > detail::Stride<N - 1>::bits_count) {
@@ -1471,6 +1539,7 @@ public:
 
         std::optional<std::pair<uint8_t, T>> longest;
         uint8_t offset = Iar::iar_size;
+
         auto const update_longest = [&longest, &offset](auto node, auto slice) {
             uint8_t vec_idx = 0;
             if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
@@ -1483,10 +1552,14 @@ public:
                                         .value(vec_idx)),
                 };
             }
+        };
+
+        auto const visit_node = [&offset, update_longest](auto node, auto slice) {
+            update_longest(node, slice.prefix(slice.len() - 1));
             offset += detail::Stride<N>::bits_count;
         };
 
-        find_leaf_branch(node, prefix, update_longest);
+        detail::find_leaf_branch(node, prefix, visit_node);
         if (prefix.len() < detail::Stride<N>::bits_count) {
             update_longest(*node, prefix);
         }
@@ -1500,6 +1573,7 @@ public:
 
         std::optional<std::pair<uint8_t, T*>> longest;
         uint8_t offset = Iar::iar_size;
+
         auto const update_longest = [&longest, &offset](auto node, auto slice) {
             uint8_t vec_idx = 0;
             if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
@@ -1510,10 +1584,14 @@ public:
                                             static_cast<uint8_t>(vec_idx + 1)}
                                                               .value(vec_idx))};
             }
+        };
+
+        auto const visit_node = [&offset, update_longest](auto node, auto slice) {
+            update_longest(node, slice.prefix(slice.len() - 1));
             offset += detail::Stride<N>::bits_count;
         };
 
-        find_leaf_branch(node, prefix, update_longest);
+        detail::find_leaf_branch(node, prefix, visit_node);
         if (prefix.len() < detail::Stride<N>::bits_count) {
             update_longest(*node, prefix);
         }
@@ -1524,39 +1602,22 @@ public:
     /// Match longest prefix returning iterator.
     template <class I = Iar, std::enable_if_t<std::is_same_v<I, Iar0<N>>>* = nullptr>
     ByeTrieIterator<P, T, N> match_longest_iter(Bits<P> prefix) const noexcept(false) {
-        auto suffix = prefix;
-        detail::Node<N>* node = &roots_.root(suffix);
-
-        std::optional<std::pair<detail::Node<N>, uint8_t>> longest;
+        std::optional<std::pair<uint8_t, detail::Node<N>>> longest;
         std::vector<detail::Node<N>> path;
-        auto const update_longest = [&longest, &path](auto node, auto slice) {
-            uint8_t vec_idx = 0;
-            if (auto const len = node.internal_bitmap.find_longest(vec_idx, slice)) {
-                longest = std::pair{
-                        node, detail::Stride<N>::bits_count * path.size() + len.value()};
-            }
-            path.push_back(node);
-        };
-
-        find_leaf_branch(node, suffix, update_longest);
-        if (suffix.len() < detail::Stride<N>::bits_count) {
-            update_longest(*node, suffix);
-        }
+        auto suffix = prefix;
+        auto node = roots_.root(suffix);
+        detail::match_longest<P, N>(longest, path, node, suffix);
 
         if (!longest.has_value()) {
             return end();
         }
 
-        path.erase(path.begin() + longest->second / detail::Stride<N>::bits_count,
-                   path.end());
-
         return ByeTrieIterator<P, T, N>(
                 path,
                 prefix.prefix(path.size() * detail::Stride<N>::bits_count),
-                longest->first,
+                longest->second,
                 prefix.sub(path.size() * detail::Stride<N>::bits_count,
-                           longest->second
-                                   - path.size() * detail::Stride<N>::bits_count));
+                           longest->first - path.size() * detail::Stride<N>::bits_count));
     }
 
     /// Erase exact prefix.
@@ -1566,7 +1627,7 @@ public:
         detail::Node<N>* node = &roots_.root(prefix);
         auto reminder = prefix;
 
-        find_leaf_branch(node, reminder, noop);
+        detail::find_leaf_branch(node, reminder, noop);
         if (reminder.len() > detail::Stride<N - 1>::bits_count) {
             return std::nullopt;
         }
@@ -1629,7 +1690,7 @@ public:
         auto suffix = prefix;
         detail::Node<N>* node = &roots_.root(suffix);
 
-        find_leaf_branch(node, suffix, noop);
+        detail::find_leaf_branch(node, suffix, noop);
         if (suffix.len() > detail::Stride<N - 1>::bits_count) {
             return ByeTrieSubs<P, T, N>{{}, prefix};
         }
@@ -1646,10 +1707,10 @@ public:
         detail::Node<N>* node = &roots_.root(suffix);
 
         uint8_t offset = Iar::iar_size;
-        auto const visit = [&offset, prefix, &on_super](auto node, auto reminder) {
-            for (auto len = 0u; len <= reminder.len(); ++len) {
+        auto const visit_prefixes = [&offset, prefix, &on_super](auto node, auto slice) {
+            for (auto len = 0u; len <= slice.len(); ++len) {
                 uint8_t vec_idx = 0;
-                if (node.internal_bitmap.exists(vec_idx, reminder.prefix(len))) {
+                if (node.internal_bitmap.exists(vec_idx, slice.prefix(len))) {
                     on_super(prefix.sub(0, offset + len),
                              *detail::as_ptr<T>(
                                      detail::NodeVec{node.children,
@@ -1658,13 +1719,15 @@ public:
                                              .value(vec_idx)));
                 }
             }
+        };
+        auto const visit_node = [&offset, visit_prefixes](auto node, auto slice) {
+            visit_prefixes(node, slice.prefix(slice.len() - 1));
             offset += detail::Stride<N>::bits_count;
         };
 
-        find_leaf_branch(node, suffix, visit);
-
+        detail::find_leaf_branch(node, suffix, visit_node);
         if (suffix.len() < detail::Stride<N>::bits_count) {
-            visit(*node, suffix);
+            visit_prefixes(*node, suffix);
         }
     }
 
@@ -1682,22 +1745,6 @@ public:
 
 private:
     static constexpr auto noop = [](auto...) {};
-
-    static void find_leaf_branch(detail::Node<N>*& node,
-                                 Bits<P>& prefix,
-                                 auto on_node) noexcept {
-        while (prefix.len() >= detail::Stride<N>::bits_count) {
-            on_node(*node, prefix.prefix(detail::Stride<N - 1>::bits_count));
-            auto const slice = prefix.prefix(detail::Stride<N>::bits_count);
-            if (node->external_bitmap.exists(slice)) {
-                auto const vec_idx = node->external_bitmap.before(slice);
-                node = &node->children[vec_idx].node;
-            } else {
-                break;
-            }
-            prefix = prefix.suffix(detail::Stride<N>::bits_count);
-        }
-    }
 
     /// \post Strong exception guarantee
     /// \throw Forwards `Alloc::realloc` exception
@@ -1757,7 +1804,7 @@ private:
         auto reminder = prefix;
 
         size_t level = 0;
-        find_leaf_branch(node, reminder, [&level, &stack](auto& node, auto) {
+        detail::find_leaf_branch(node, reminder, [&level, &stack](auto& node, auto) {
             stack[level++] = &node;
         });
 
