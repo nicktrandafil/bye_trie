@@ -815,6 +815,36 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
         };
         REQUIRE(values == expected);
     }
+
+    SECTION("go_to_longest") {
+        SECTION("within first node, first") {
+            trie.insert(Bits{0b00000000000000000'00000'00000'00000u, 1}, 1);
+            trie.insert(Bits{0b00000000000000000'00000'00000'00010u, 2}, 2);
+            auto subs = trie.subs(Bits{0b00000000000000000'00000'00000'00000u, 1});
+            auto it = subs.begin();
+            it.go_to_longest(Bits{0b00000000000000000'00000'00000'00000u, 2});
+            REQUIRE(*it == 1);
+            REQUIRE(*++it == 2);
+        }
+        SECTION("withing first node, second") {
+            trie.insert(Bits{0b00000000000000000'00000'00000'00000u, 1}, 1);
+            trie.insert(Bits{0b00000000000000000'00000'00000'00010u, 2}, 2);
+            auto subs = trie.subs(Bits{0b00000000000000000'00000'00000'00010u, 2});
+            auto it = subs.begin();
+            it.go_to_longest(Bits{0b00000000000000000'00000'00000'00010u, 2});
+            REQUIRE(*it == 2);
+            REQUIRE(++it == subs.end());
+        }
+        SECTION("withing second node, first") {
+            trie.insert(Bits{0b00000000000000000'00000'00000'00000u, 1}, 1);
+            trie.insert(Bits{0b00000000000000000'00000'00000'10010u, 5}, 2);
+            auto subs = trie.subs(Bits{0b00000000000000000'00000'00000'00000u, 1});
+            auto it = subs.begin();
+            it.go_to_longest(Bits{0b00000000000000000'00000'00000'10010u, 6});
+            REQUIRE(*it == 2);
+            REQUIRE(++it == subs.end());
+        }
+    }
 }
 
 TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][ByeTrieIterator]", Ns) {
