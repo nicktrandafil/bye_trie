@@ -748,6 +748,14 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
         REQUIRE((++ ++subs.begin() == subs.end()));
     }
 
+    SECTION("set non zero fixed bits in one_past_end") {
+        trie.insert(Bits{0b11111u, 5}, 1);
+        auto const subs = trie.subs(Bits{0b1u, 1});
+        REQUIRE((subs.begin().key() == Bits{0b11111u, 5}));
+        REQUIRE((*subs.begin() == 1));
+        REQUIRE((++subs.begin() == subs.end()));
+    }
+
     SECTION("iterator comparison") {
         trie.insert(Bits{0xfffffff0u, 32}, 1);
         trie.insert(Bits{0xfffffff1u, 32}, 2);
