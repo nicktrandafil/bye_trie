@@ -1043,11 +1043,12 @@ private:
         if (path.size() != 0) {
             ret.path = {};
             ret.prefix = path[0].prefix;
+            ret.fixed_bits = path[0].fixed_bits;
         }
         ret.value_iter_bits =
-                Bits<P>(0, detail::Stride<N>::bits_count - fixed_bits.len());
+                Bits<P>(0, detail::Stride<N>::bits_count - ret.fixed_bits.len());
         ret.child_iter_bits =
-                Bits<P>(0, detail::Stride<N>::bits_count - fixed_bits.len() + 1);
+                Bits<P>(0, detail::Stride<N>::bits_count - ret.fixed_bits.len() + 1);
         return ret;
     }
 
