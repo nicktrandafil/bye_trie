@@ -1620,10 +1620,11 @@ public:
                            longest->first - path.size() * detail::Stride<N>::bits_count));
     }
 
-    /// Erase exact prefix.
-    /// \throw Forwards `Alloc::realloc` exception
-    std::optional<T> erase_exact(Bits<P> prefix) noexcept(
-            noexcept(alloc_.realloc(MemBlk{}, 0))) {
+    /// Erase prefix.
+    /// \throw Forwards `Alloc::realloc` exception.
+    /// \node Invalidates all iterators.
+    std::optional<T> erase(Bits<P> prefix) noexcept(noexcept(alloc_.realloc(MemBlk{},
+                                                                            0))) {
         detail::Node<N>* node = &roots_.root(prefix);
         auto reminder = prefix;
 
@@ -1636,6 +1637,8 @@ public:
         if (!node->internal_bitmap.exists(vec_idx, reminder)) {
             return std::nullopt;
         }
+
+        size_ -= 1;
 
         detail::NodeVec vec{node->children,
                             node->external_bitmap.total(),
@@ -1651,8 +1654,59 @@ public:
         vec.erase_value(vec_idx, alloc_);
         node->children = vec.data();
         node->internal_bitmap.unset(reminder);
-        size_ -= 1;
         return ret;
+    }
+
+    /// \pre A valid and not `end()` iterator.
+    /// \return Iterator to the element after the removed one.
+    /// \throw std::bad_alloc.
+    [[nodiscard]] ByeTrieIterator<P, T, N> erase(ByeTrieIterator<P, T, N> it) noexcept(
+            false) {
+        assert(it != end());
+
+        auto const prefix = it.prefix.concatenated(it.value_iter_bits);
+        auto node = it.path.empty()
+                          ? &roots_.root(prefix)
+                          : &it.path.back()
+                                     .node
+                                     .children[it.path.back().node.external_bitmap.before(
+                                             it.path.back().child_iter_bits)]
+                                     .node;
+
+        auto slice = it.value_iter_bits;
+
+        uint8_t vec_idx;
+        {
+            auto const exists =
+                    node->internal_bitmap.exists(/*out*/ vec_idx, /*out: suffix*/ slice);
+            assert(exists);
+        }
+
+        size_ -= 1;
+
+        detail::NodeVec vec{node->children,
+                            node->external_bitmap.total(),
+                            node->internal_bitmap.total()};
+
+        if (vec.size() < 2) [[unlikely]] {
+            if (auto const [height, node] = erase_cleaning(prefix); height > 0) {
+                it.path.erase(it.path.begin() + height, it.path.end());
+                it.value_iter_bits = Bits<P>{0, detail::Stride<N>::bits_count};
+                it.path.back().node = node;
+                ++it;
+            } else {
+                it = end();
+            }
+            return it;
+        }
+
+        vec.erase_value(vec_idx, alloc_);
+        node->children = vec.data();
+        node->internal_bitmap.unset(slice);
+        it.node = *node;
+        ++it;
+
+        return it;
     }
 
     size_t size() const noexcept {
@@ -1791,8 +1845,10 @@ private:
     }
 
     /// \pre Exists
+    /// \return New height and the leaf node
     /// \throw Forwards `Alloc::realloc` exception
-    void erase_cleaning(Bits<P> prefix) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0))) {
+    std::pair<size_t, detail::Node<N>> erase_cleaning(Bits<P> prefix) noexcept(
+            noexcept(alloc_.realloc(MemBlk{}, 0))) {
         assert(match_exact(prefix).has_value());
 
         std::array<detail::Node<N>*,
@@ -1801,12 +1857,13 @@ private:
                 stack;
 
         detail::Node<N>* node = &roots_.root(prefix);
-        auto reminder = prefix;
-
-        size_t level = 0;
-        detail::find_leaf_branch(node, reminder, [&level, &stack](auto& node, auto) {
-            stack[level++] = &node;
-        });
+        size_t height = 0; // height, excluding the leaf
+        {
+            auto reminder = prefix;
+            detail::find_leaf_branch(node, reminder, [&height, &stack](auto& node, auto) {
+                stack[height++] = &node;
+            });
+        }
 
         detail::NodeVec const vec{node->children,
                                   node->external_bitmap.total(),
@@ -1814,13 +1871,11 @@ private:
         alloc_.dealloc(MemBlk{vec.data(), vec.size_bytes()});
         node->children = nullptr;
         node->internal_bitmap = {};
-        size_ -= 1;
 
-        reminder = prefix;
-        while (level--) {
-            auto& node = *stack[level];
-            auto const slice = reminder.sub(level * detail::Stride<N>::bits_count,
-                                            detail::Stride<N>::bits_count);
+        while (height--) {
+            auto& node = *stack[height];
+            auto const slice = prefix.sub(height * detail::Stride<N>::bits_count,
+                                          detail::Stride<N>::bits_count);
             detail::NodeVec vec{node.children,
                                 node.external_bitmap.total(),
                                 node.internal_bitmap.total()};
@@ -1836,6 +1891,11 @@ private:
                 break;
             }
         }
+
+        auto const new_height = height + 1; // new height including the leaf
+        auto const new_node = new_height ? *stack[new_height - 1] : detail::Node<N>{};
+
+        return std::pair{new_height, new_node};
     }
 
 private:

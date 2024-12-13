@@ -528,18 +528,18 @@ TEST_CASE("", "[ByeTrie][match_longest_ref]") {
     }
 }
 
-TEMPLATE_LIST_TEST_CASE("Erase values", "[ByeTrie][erase_exact]", Ns) {
+TEMPLATE_LIST_TEST_CASE("Erase values", "[ByeTrie][erase]", Ns) {
     constexpr auto N = TestType{};
     SECTION("Not found") {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
-        REQUIRE(!trie.erase_exact(Bits{0u, 5}));
-        REQUIRE(!trie.erase_exact(Bits{0u, 4}));
+        REQUIRE(!trie.erase(Bits{0u, 5}));
+        REQUIRE(!trie.erase(Bits{0u, 4}));
     }
     SECTION("No unfold-cleaning") {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{0b0'00000'00000u, 11}, 0);
         trie.insert(Bits{0b1'00000'00000u, 11}, 1);
-        REQUIRE(trie.erase_exact(Bits{0b0'00000'00000u, 11}));
+        REQUIRE(trie.erase(Bits{0b0'00000'00000u, 11}));
         REQUIRE(trie.size() == 1);
         REQUIRE(*trie.match_exact(Bits{0b1'00000'00000u, 11}) == 1);
     }
@@ -547,7 +547,7 @@ TEMPLATE_LIST_TEST_CASE("Erase values", "[ByeTrie][erase_exact]", Ns) {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{0b0'00000'00000u, 11}, 0);
         trie.insert(Bits{0b0'00000u, 6}, 1);
-        REQUIRE(trie.erase_exact(Bits{0b0'00000'00000u, 11}));
+        REQUIRE(trie.erase(Bits{0b0'00000'00000u, 11}));
         REQUIRE(trie.size() == 1);
         REQUIRE(*trie.match_exact(Bits{0b0'00000u, 6}) == 1);
     }
@@ -555,27 +555,27 @@ TEMPLATE_LIST_TEST_CASE("Erase values", "[ByeTrie][erase_exact]", Ns) {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{0b0'00001'00000u, 11}, 0);
         trie.insert(Bits{0b0'00000u, 6}, 1);
-        REQUIRE(trie.erase_exact(Bits{0b0'00001'00000u, 11}));
+        REQUIRE(trie.erase(Bits{0b0'00001'00000u, 11}));
         REQUIRE(trie.size() == 1);
         REQUIRE(*trie.match_exact(Bits{0b0'00000u, 6}) == 1);
     }
     SECTION("Unfold-cleaning the branch up to the root") {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{0b0'00000'00000u, 11}, 0);
-        REQUIRE(trie.erase_exact(Bits{0b0'00000'00000u, 11}));
+        REQUIRE(trie.erase(Bits{0b0'00000'00000u, 11}));
         REQUIRE(trie.size() == 0);
     }
     SECTION("Unfold-cleaning the branch in case there is just root node") {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{0b0001u, 4}, 0);
-        REQUIRE(trie.erase_exact(Bits{0b0001u, 4}));
+        REQUIRE(trie.erase(Bits{0b0001u, 4}));
         REQUIRE(trie.size() == 0);
     }
     SECTION("Node vec index is not equal to stride_m_1") {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{1u, 2}, 0);
         trie.insert(Bits{2u, 2}, 1);
-        trie.erase_exact(Bits{2u, 2});
+        trie.erase(Bits{2u, 2});
         REQUIRE(trie.size() == 1);
         REQUIRE(trie.match_exact(Bits{1u, 2}) == 0);
     }
@@ -980,7 +980,7 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][match_longest_iter]", Ns) {
     }
 
     SECTION("no match") {
-        trie.erase_exact(Bits{0u, 0});
+        trie.erase(Bits{0u, 0});
         REQUIRE(trie.match_longest_iter(Bits{1u, 1}) == trie.end());
     }
 }
