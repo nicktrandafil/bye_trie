@@ -26,9 +26,15 @@
 
 #include <catch2/catch_all.hpp>
 
+#include <sstream>
+
 using namespace bye_trie;
 
 using PrefixTypes = std::tuple<uint32_t, uint64_t>;
+
+std::ostream& operator<<(std::ostream& os, std::pair<Bits<unsigned>, long> const& x) {
+    return os << "(" << x.first << "," << x.second << ")";
+}
 
 TEMPLATE_LIST_TEST_CASE("", "[Bits][concatenated]", PrefixTypes) {
     Bits<TestType> slice(0b1100, 4);
@@ -70,7 +76,7 @@ TEST_CASE("", "[ExternalBitmap][exists][before]") {
 }
 
 TEST_CASE("", "[InternalBitmap][set][unset][exists]") {
-    uint8_t idx;
+    unsigned idx;
 
     SECTION("7") {
         detail::InternalBitmap<7> bitmap(
@@ -144,7 +150,7 @@ TEST_CASE("", "[InternalBitmap][set][unset][exists]") {
 }
 
 TEST_CASE("", "[InternalBitmap][longest_before]") {
-    uint8_t idx;
+    unsigned idx;
 
     SECTION("6") {
         detail::InternalBitmap<6> bitmap(
@@ -224,7 +230,7 @@ TEST_CASE("", "[InternalBitmap][longest_before]") {
     }
 }
 
-template <uint8_t N>
+template <unsigned N>
 class MallocResource {
 public:
     MallocResource(detail::NodeVec<N>* vec)
@@ -241,11 +247,11 @@ private:
     detail::NodeVec<N>* vec;
 };
 
-using Ns = std::tuple<std::integral_constant<uint8_t, 3>,
-                      std::integral_constant<uint8_t, 4>,
-                      std::integral_constant<uint8_t, 5>,
-                      std::integral_constant<uint8_t, 6>,
-                      std::integral_constant<uint8_t, 7>>;
+using Ns = std::tuple<std::integral_constant<unsigned, 3>,
+                      std::integral_constant<unsigned, 4>,
+                      std::integral_constant<unsigned, 5>,
+                      std::integral_constant<unsigned, 6>,
+                      std::integral_constant<unsigned, 7>>;
 
 TEMPLATE_LIST_TEST_CASE("Branch manipulation", "[NodeVec][with_new_branch]", Ns) {
     constexpr auto N = TestType{};
@@ -528,26 +534,26 @@ TEST_CASE("", "[ByeTrie][match_longest_ref]") {
     }
 }
 
-TEMPLATE_LIST_TEST_CASE("Erase values", "[ByeTrie][erase_exact]", Ns) {
+TEMPLATE_LIST_TEST_CASE("Erase values", "[ByeTrie][erase]", Ns) {
     constexpr auto N = TestType{};
     SECTION("Not found") {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
-        REQUIRE(!trie.erase_exact(Bits{0u, 5}));
-        REQUIRE(!trie.erase_exact(Bits{0u, 4}));
+        REQUIRE(!trie.erase(Bits{0u, 5}));
+        REQUIRE(!trie.erase(Bits{0u, 4}));
     }
     SECTION("No unfold-cleaning") {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{0b0'00000'00000u, 11}, 0);
         trie.insert(Bits{0b1'00000'00000u, 11}, 1);
-        REQUIRE(trie.erase_exact(Bits{0b0'00000'00000u, 11}));
+        REQUIRE(trie.erase(Bits{0b0'00000'00000u, 11}));
         REQUIRE(trie.size() == 1);
         REQUIRE(*trie.match_exact(Bits{0b1'00000'00000u, 11}) == 1);
     }
     SECTION("Unfold-cleaning just the leaf which contains the value") {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
-        trie.insert(Bits{0b0'00000'00000u, 11}, 0);
-        trie.insert(Bits{0b0'00000u, 6}, 1);
-        REQUIRE(trie.erase_exact(Bits{0b0'00000'00000u, 11}));
+        trie.insert(Bits{0b00'000'000'000u, 11}, 0);
+        trie.insert(Bits{0b000'000u, 6}, 1);
+        REQUIRE(trie.erase(Bits{0b00'000'000'000u, 11}));
         REQUIRE(trie.size() == 1);
         REQUIRE(*trie.match_exact(Bits{0b0'00000u, 6}) == 1);
     }
@@ -555,27 +561,27 @@ TEMPLATE_LIST_TEST_CASE("Erase values", "[ByeTrie][erase_exact]", Ns) {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{0b0'00001'00000u, 11}, 0);
         trie.insert(Bits{0b0'00000u, 6}, 1);
-        REQUIRE(trie.erase_exact(Bits{0b0'00001'00000u, 11}));
+        REQUIRE(trie.erase(Bits{0b0'00001'00000u, 11}));
         REQUIRE(trie.size() == 1);
         REQUIRE(*trie.match_exact(Bits{0b0'00000u, 6}) == 1);
     }
     SECTION("Unfold-cleaning the branch up to the root") {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{0b0'00000'00000u, 11}, 0);
-        REQUIRE(trie.erase_exact(Bits{0b0'00000'00000u, 11}));
+        REQUIRE(trie.erase(Bits{0b0'00000'00000u, 11}));
         REQUIRE(trie.size() == 0);
     }
     SECTION("Unfold-cleaning the branch in case there is just root node") {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{0b0001u, 4}, 0);
-        REQUIRE(trie.erase_exact(Bits{0b0001u, 4}));
+        REQUIRE(trie.erase(Bits{0b0001u, 4}));
         REQUIRE(trie.size() == 0);
     }
     SECTION("Node vec index is not equal to stride_m_1") {
         bye_trie::ByeTrie<uint32_t, long, SystemAllocator, N> trie;
         trie.insert(Bits{1u, 2}, 0);
         trie.insert(Bits{2u, 2}, 1);
-        trie.erase_exact(Bits{2u, 2});
+        trie.erase(Bits{2u, 2});
         REQUIRE(trie.size() == 1);
         REQUIRE(trie.match_exact(Bits{1u, 2}) == 0);
     }
@@ -679,44 +685,41 @@ TEST_CASE("Exception guarantee", "[ByeTrie][insert]") {
 
 TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
     using ByeTrie = ByeTrie<uint32_t, long, SystemAllocator, TestType{}>;
+    using SubsIterator = SubsIterator<uint32_t, long, TestType{}>;
 
     ByeTrie trie;
 
     SECTION("0/0 exists, begin() doesn't seek the first prefix") {
         trie.insert(Bits{0u, 0}, 1);
-        REQUIRE(trie.subs(Bits{0u, 0}).begin().key() == Bits{0u, 0});
-        REQUIRE(*trie.subs(Bits{0u, 0}).begin() == 1);
+        REQUIRE(trie.subs(Bits{0u, 0}).key() == Bits{0u, 0});
+        REQUIRE(*trie.subs(Bits{0u, 0}) == 1);
     }
 
     SECTION("0/0 doesn't exist, begin() seeks the first prefix") {
         trie.insert(Bits{0u, 1}, 1);
-        REQUIRE(trie.subs(Bits{0u, 0}).begin().key() == Bits{0u, 1});
-        REQUIRE(*trie.subs(Bits{0u, 0}).begin() == 1);
+        REQUIRE(trie.subs(Bits{0u, 0}).key() == Bits{0u, 1});
+        REQUIRE(*trie.subs(Bits{0u, 0}) == 1);
     }
 
     SECTION("empty ByeTrie, begin() == end()") {
-        auto const subs = trie.subs(Bits{0u, 0});
-        REQUIRE(subs.begin() == subs.end());
+        REQUIRE(trie.subs(Bits{0u, 0}) == SubsIterator{});
     }
 
     SECTION("not empty, begin() != end()") {
         trie.insert(Bits{0u, 1}, 1);
-        auto const subs = trie.subs(Bits{0u, 0});
-        REQUIRE(subs.begin() != subs.end());
+        REQUIRE(trie.subs(Bits{0u, 0}) != SubsIterator{});
     }
 
     SECTION("increment reaches next element") {
         trie.insert(Bits{0u, 0}, 1);
         trie.insert(Bits{0u, 1}, 2);
-        auto const subs = trie.subs(Bits{0u, 0});
-        REQUIRE((++subs.begin()).key() == Bits{0u, 1});
-        REQUIRE(*++subs.begin() == 2);
+        REQUIRE((++trie.subs(Bits{0u, 0})).key() == Bits{0u, 1});
+        REQUIRE(*++trie.subs(Bits{0u, 0}) == 2);
     }
 
     SECTION("increment reaches end") {
         trie.insert(Bits{0u, 0}, 1);
-        auto const subs = trie.subs(Bits{0u, 0});
-        REQUIRE(++subs.begin() == subs.end());
+        REQUIRE(++trie.subs(Bits{0u, 0}) == SubsIterator{});
     }
 
     SECTION("iterate within node") {
@@ -725,8 +728,7 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
         trie.insert(Bits{0u, 3}, 3);
         trie.insert(Bits{0u, 4}, 4);
         std::vector<std::pair<Bits<unsigned>, long>> values;
-        auto const subs = trie.subs(Bits{0u, 0});
-        for (auto it = subs.begin(); it != subs.end(); ++it) {
+        for (auto it = trie.subs(Bits{0u, 0}); it != SubsIterator{}; ++it) {
             values.emplace_back(it.key(), *it);
         }
         std::vector<std::pair<Bits<unsigned>, long>> const expected{
@@ -740,27 +742,24 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
     SECTION("node does not have prefixes, but the next node has") {
         trie.insert(Bits{0u, 5}, 1);
         trie.insert(Bits{0u, 6}, 2);
-        auto const subs = trie.subs(Bits{0u, 0});
-        REQUIRE((subs.begin().key() == Bits{0u, 5}));
-        REQUIRE((*subs.begin() == 1));
-        REQUIRE(((++subs.begin()).key() == Bits{0u, 6}));
-        REQUIRE((*++subs.begin() == 2));
-        REQUIRE((++ ++subs.begin() == subs.end()));
+        REQUIRE(trie.subs(Bits{0u, 0}).key() == Bits{0u, 5});
+        REQUIRE(*trie.subs(Bits{0u, 0}) == 1);
+        REQUIRE((++trie.subs(Bits{0u, 0})).key() == Bits{0u, 6});
+        REQUIRE(*++trie.subs(Bits{0u, 0}) == 2);
+        REQUIRE(++ ++trie.subs(Bits{0u, 0}) == SubsIterator{});
     }
 
     SECTION("set non zero fixed bits in one_past_end") {
         trie.insert(Bits{0b11111u, 5}, 1);
-        auto const subs = trie.subs(Bits{0b1u, 1});
-        REQUIRE((subs.begin().key() == Bits{0b11111u, 5}));
-        REQUIRE((*subs.begin() == 1));
-        REQUIRE((++subs.begin() == subs.end()));
+        REQUIRE(trie.subs(Bits{0b1u, 1}).key() == Bits{0b11111u, 5});
+        REQUIRE((*trie.subs(Bits{0b1u, 1}) == 1));
+        REQUIRE(++trie.subs(Bits{0b1u, 1}) == SubsIterator{});
     }
 
     SECTION("iterator comparison") {
         trie.insert(Bits{0xfffffff0u, 32}, 1);
         trie.insert(Bits{0xfffffff1u, 32}, 2);
-        auto const subs = trie.subs(Bits{0u, 0});
-        REQUIRE(++subs.begin() == ++subs.begin());
+        REQUIRE(++trie.subs(Bits{0u, 0}) == ++trie.subs(Bits{0u, 0}));
     }
 
     SECTION("iterate a subnet") {
@@ -768,9 +767,8 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
         trie.insert(Bits{0x01ffffffu, 32}, 2);
         trie.insert(Bits{0x03ffffffu, 32}, 3);
         trie.insert(Bits{0x040fffffu, 32}, 4);
-        auto const subs = trie.subs(Bits{0x00ffffffu, 24});
         std::vector<std::pair<Bits<unsigned>, long>> values;
-        for (auto it = subs.begin(); it != subs.end(); ++it) {
+        for (auto it = trie.subs(Bits{0x00ffffffu, 24}); it != SubsIterator{}; ++it) {
             values.emplace_back(it.key(), *it);
         }
         std::vector<std::pair<Bits<unsigned>, long>> const expected{
@@ -785,9 +783,8 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
         trie.insert(Bits{0x01ffffffu, 32}, 2);
         trie.insert(Bits{0x03ffffffu, 32}, 3);
         trie.insert(Bits{0x040fffffu, 32}, 4);
-        auto const subs = trie.subs(Bits{0x00000000u, 0});
         std::vector<std::pair<Bits<unsigned>, long>> values;
-        for (auto it = subs.begin(); it != subs.end(); ++it) {
+        for (auto it = trie.subs(Bits{0x00000000u, 0}); it != SubsIterator{}; ++it) {
             values.emplace_back(it.key(), *it);
         }
         std::vector<std::pair<Bits<unsigned>, long>> const expected{
@@ -803,9 +800,8 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
         trie.insert(Bits{0x01ffffffu, 32}, 2);
         trie.insert(Bits{0x03ffffffu, 32}, 3);
         trie.insert(Bits{0x040fffffu, 32}, 4);
-        auto const subs = trie.subs(Bits{0x00000000u, 0});
         std::vector<std::pair<Bits<unsigned>, long>> values;
-        for (auto it = subs.begin(); it != subs.end(); ++it) {
+        for (auto it = trie.subs(Bits{0x00000000u, 0}); it != SubsIterator{}; ++it) {
             values.emplace_back(it.key(), *it);
         }
         std::vector<std::pair<Bits<unsigned>, long>> const expected{
@@ -817,32 +813,37 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][SubsIterator]", Ns) {
     }
 
     SECTION("go_to_longest") {
-        SECTION("within first node, first") {
+        SECTION("within first node, first, not shorter") {
             trie.insert(Bits{0b00000000000000000'00000'00000'00000u, 1}, 1);
             trie.insert(Bits{0b00000000000000000'00000'00000'00010u, 2}, 2);
-            auto subs = trie.subs(Bits{0b00000000000000000'00000'00000'00000u, 1});
-            auto it = subs.begin();
+            auto it = trie.subs(Bits{0b00000000000000000'00000'00000'00000u, 1});
             it.go_to_longest(Bits{0b00000000000000000'00000'00000'00000u, 2});
             REQUIRE(*it == 1);
             REQUIRE(*++it == 2);
         }
-        SECTION("withing first node, second") {
+        SECTION("within first node, first") {
             trie.insert(Bits{0b00000000000000000'00000'00000'00000u, 1}, 1);
             trie.insert(Bits{0b00000000000000000'00000'00000'00010u, 2}, 2);
-            auto subs = trie.subs(Bits{0b00000000000000000'00000'00000'00010u, 2});
-            auto it = subs.begin();
+            auto it = trie.subs(Bits{0b00000000000000000'00000'00000'00000u, 1});
+            it.go_to_longest(Bits{0b00000000000000000'00000'00000'00000u, 2});
+            REQUIRE(*it == 1);
+            REQUIRE(*++it == 2);
+        }
+        SECTION("within first node, second") {
+            trie.insert(Bits{0b00000000000000000'00000'00000'00000u, 1}, 1);
+            trie.insert(Bits{0b00000000000000000'00000'00000'00010u, 2}, 2);
+            auto it = trie.subs(Bits{0b00000000000000000'00000'00000'00010u, 2});
             it.go_to_longest(Bits{0b00000000000000000'00000'00000'00010u, 2});
             REQUIRE(*it == 2);
-            REQUIRE(++it == subs.end());
+            REQUIRE(++it == SubsIterator{});
         }
         SECTION("withing second node, first") {
             trie.insert(Bits{0b00000000000000000'00000'00000'00000u, 1}, 1);
             trie.insert(Bits{0b00000000000000000'00000'00000'10010u, 5}, 2);
-            auto subs = trie.subs(Bits{0b00000000000000000'00000'00000'00000u, 1});
-            auto it = subs.begin();
+            auto it = trie.subs(Bits{0b00000000000000000'00000'00000'00000u, 1});
             it.go_to_longest(Bits{0b00000000000000000'00000'00000'10010u, 6});
             REQUIRE(*it == 2);
-            REQUIRE(++it == subs.end());
+            REQUIRE(++it == SubsIterator{});
         }
     }
 }
@@ -980,7 +981,7 @@ TEMPLATE_LIST_TEST_CASE("", "[ByeTrie][match_longest_iter]", Ns) {
     }
 
     SECTION("no match") {
-        trie.erase_exact(Bits{0u, 0});
+        trie.erase(Bits{0u, 0});
         REQUIRE(trie.match_longest_iter(Bits{1u, 1}) == trie.end());
     }
 }
@@ -1035,7 +1036,7 @@ TEST_CASE("Initial array optimization", "[ByeTrie][Iar]") {
     trie.insert(Bits{0u, 16}, 1);
     REQUIRE(trie.size() == 1);
     REQUIRE(trie.match_exact(Bits{0u, 16}) == 1);
-    REQUIRE(trie.match_longest(Bits{0u, 16}) == std::pair{uint8_t(16), 1L});
+    REQUIRE(trie.match_longest(Bits{0u, 16}) == std::pair{16u, 1L});
     trie.replace(Bits{0u, 16}, 2);
     REQUIRE(trie.match_exact(Bits{0u, 16}) == 2);
     trie.insert(Bits{0u, 24}, 3);

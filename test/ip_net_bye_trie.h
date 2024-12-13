@@ -116,13 +116,15 @@ boost::asio::ip::network_v6 to_network(Bits<Uint128> bits) noexcept {
 
 } // namespace detail
 
-inline constexpr uint8_t stride = 5;
+inline constexpr unsigned stride = 5;
 
 template <class IpNet, UnsignedIntegral IntType, TrivialLittleObject T>
 class IpNetSubsIterator {
     using Inner = SubsIterator<IntType, T, stride>;
 
 public:
+    IpNetSubsIterator() = default;
+
     explicit IpNetSubsIterator(Inner&& x)
             : inner{x} {
     }
@@ -157,27 +159,6 @@ private:
     Inner inner;
 };
 
-template <class PrefixType, UnsignedIntegral P, TrivialLittleObject T>
-class IpNetByeTrieSubs {
-public:
-    explicit IpNetByeTrieSubs(ByeTrieSubs<P, T, stride>&& inner)
-            : begin_{std::move(inner).begin()}
-            , end_{SubsIterator<P, T, stride>(std::move(inner).end())} {
-    }
-
-    IpNetSubsIterator<PrefixType, P, T> begin() const {
-        return begin_;
-    }
-
-    IpNetSubsIterator<PrefixType, P, T> const& end() const {
-        return end_;
-    }
-
-private:
-    IpNetSubsIterator<PrefixType, P, T> begin_;
-    IpNetSubsIterator<PrefixType, P, T> end_;
-};
-
 template <class IpNet, UnsignedIntegral IntType, class T, class Allocator>
 class IpNetByeTrie : private ByeTrie<IntType, T, Allocator, stride> {
     using Base = ByeTrie<IntType, T, Allocator, stride>;
@@ -207,11 +188,12 @@ public:
 
         auto const [prefix_length, value] = *res;
 
-        return std::pair{IpNet{prefix.address(), prefix_length}, value};
+        return std::pair{IpNet{prefix.address(), static_cast<uint16_t>(prefix_length)},
+                         value};
     }
 
     auto subs(IpNet const& prefix) const {
-        return IpNetByeTrieSubs<IpNet, IntType, T>{Base::subs(detail::to_bits(prefix))};
+        return IpNetSubsIterator<IpNet, IntType, T>{Base::subs(detail::to_bits(prefix))};
     }
 
     std::vector<std::pair<IpNet, T>> supers(IpNet const& prefix) const {
@@ -231,12 +213,6 @@ public:
     }
 };
 
-template <class T>
-using ByeTrieSubsV4 = IpNetByeTrieSubs<boost::asio::ip::network_v4, uint32_t, T>;
-
-template <class T>
-using ByeTrieSubsV6 = IpNetByeTrieSubs<boost::asio::ip::network_v6, Uint128, T>;
-
 template <class T, class Allocator = SystemAllocator>
 class ByeTrieV4
         : public IpNetByeTrie<boost::asio::ip::network_v4, uint32_t, T, Allocator> {
@@ -244,11 +220,17 @@ class ByeTrieV4
     using Base::Base;
 };
 
+template <class T>
+using IpNetSubsIteratorV4 = IpNetSubsIterator<boost::asio::ip::network_v4, uint32_t, T>;
+
 template <class T, class Allocator = SystemAllocator>
 class ByeTrieV6
         : public IpNetByeTrie<boost::asio::ip::network_v6, Uint128, T, Allocator> {
     using Base = IpNetByeTrie<boost::asio::ip::network_v6, Uint128, T, Allocator>;
     using Base::Base;
 };
+
+template <class T>
+using IpNetSubsIteratorV6 = IpNetSubsIterator<boost::asio::ip::network_v6, Uint128, T>;
 
 } // namespace bye_trie

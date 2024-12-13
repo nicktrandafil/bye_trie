@@ -32,7 +32,7 @@ using namespace bye_trie;
 
 TEST_CASE("Load big data and match every prefix", "[stress]") {
     std::vector<std::pair<Bits<uint32_t>, uint32_t>> prefixes;
-    ByeTrie<uint32_t, long> trie;
+    ByeTrie<uint32_t, uint32_t> trie;
 
     uint32_t i = 0;
     Bits<uint32_t> bits{4, 8};
@@ -45,9 +45,8 @@ TEST_CASE("Load big data and match every prefix", "[stress]") {
 
     for (auto const& [prefix, value] : prefixes) {
         REQUIRE(*trie.match_exact(prefix) == value);
-        REQUIRE(*trie.match_longest(prefix)
-                == (std::pair<uint8_t, long>{prefix.len(), value}));
-        REQUIRE(trie.subs(prefix).begin().key() == prefix);
-        REQUIRE(*trie.subs(prefix).begin() == value);
+        REQUIRE(*trie.match_longest(prefix) == std::pair{prefix.len(), value});
+        REQUIRE(trie.subs(prefix).key() == prefix);
+        REQUIRE(*trie.subs(prefix) == value);
     }
 }
