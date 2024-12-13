@@ -56,8 +56,7 @@ TEST_CASE(
         REQUIRE(trie.match_longest(make_network_v4("1.2.3.4/0"))
                 == (std::pair{make_network_v4("1.2.3.4/0"), 0l}));
 
-        auto const subs = trie.subs(make_network_v4("0.0.0.0/0"));
-        REQUIRE(++subs.begin() == subs.end());
+        REQUIRE(++trie.subs(make_network_v4("0.0.0.0/0")) == IpNetSubsIteratorV4<long>{});
     }
 
     SECTION("ByeTrieV6") {
@@ -69,8 +68,7 @@ TEST_CASE(
         REQUIRE(trie.match_longest(make_network_v6("1::/0"))
                 == (std::pair{make_network_v6("1::/0"), 0l}));
 
-        auto const subs = trie.subs(make_network_v6("::0/0"));
-        REQUIRE(++subs.begin() == subs.end());
+        REQUIRE(++trie.subs(make_network_v6("::0/0")) == IpNetSubsIteratorV6<long>{});
     }
 }
 
@@ -79,18 +77,17 @@ TEST_CASE("Indirect testing of IteratorV4::operator*()", "[white-box]") {
         ByeTrieV4<long> trie;
         REQUIRE(trie.insert(make_network_v4("25.0.0.0/8"), 1) == std::nullopt);
 
-        REQUIRE(trie.subs(make_network_v4("25.1.0.0/8")).begin().key()
+        REQUIRE(trie.subs(make_network_v4("25.1.0.0/8")).key()
                 == make_network_v4("25.0.0.0/8"));
-        REQUIRE(*trie.subs(make_network_v4("25.1.0.0/8")).begin() == 1);
+        REQUIRE(*trie.subs(make_network_v4("25.1.0.0/8")) == 1);
     }
 
     SECTION("ByeTrieV6") {
         ByeTrieV6<long> trie;
         REQUIRE(trie.insert(make_network_v6("::/0"), 1) == std::nullopt);
 
-        REQUIRE(trie.subs(make_network_v6("::/0")).begin().key()
-                == make_network_v6("::/0"));
-        REQUIRE(*trie.subs(make_network_v6("::/0")).begin() == 1);
+        REQUIRE(trie.subs(make_network_v6("::/0")).key() == make_network_v6("::/0"));
+        REQUIRE(*trie.subs(make_network_v6("::/0")) == 1);
     }
 }
 
