@@ -25,16 +25,13 @@
 var NAVTREE =
 [
   [ "bye_trie", "index.html", [
-    [ "User Manual", "index.html", [
-      [ "Description", "index.html#tutorial-description", null ]
-    ] ],
-    [ "Reference documentation", "modules.html", "modules" ]
+    [ "User Manual", "index.html", "index" ]
   ] ]
 ];
 
 var NAVTREEINDEX =
 [
-"classbye__trie_1_1ByeTrie.html"
+"index.html"
 ];
 
 var SYNCONMSG = 'click to disable panel synchronisation';
