@@ -137,11 +137,9 @@ template&lt;class I  = Iar, std::enable_if_t&lt; std::is_same_v&lt; I, <a class=
 <tr class="memitem:a3b4fe2d0186f4416db6fa39bf0983870"><td class="memTemplItemLeft" align="right" valign="top">ByeTrieIterator&lt; P, T, N &gt;&#160;</td><td class="memTemplItemRight" valign="bottom"><b>match_longest_iter</b> (Bits&lt; P &gt; prefix) const noexcept(false)</td></tr>
 <tr class="memdesc:a3b4fe2d0186f4416db6fa39bf0983870"><td class="mdescLeft">&#160;</td><td class="mdescRight">Match longest prefix returning iterator. <br /></td></tr>
 <tr class="separator:a3b4fe2d0186f4416db6fa39bf0983870"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a214fea35a148229e58c57eeac2872002" id="r_a214fea35a148229e58c57eeac2872002"><td class="memItemLeft" align="right" valign="top">std::optional&lt; T &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classbye__trie_1_1ByeTrie.html#a214fea35a148229e58c57eeac2872002">erase</a> (Bits&lt; P &gt; prefix) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0)))</td></tr>
-<tr class="memdesc:a214fea35a148229e58c57eeac2872002"><td class="mdescLeft">&#160;</td><td class="mdescRight">Erase prefix.  <br /></td></tr>
-<tr class="separator:a214fea35a148229e58c57eeac2872002"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:adae9bd70f66630d260da55782a460f65" id="r_adae9bd70f66630d260da55782a460f65"><td class="memItemLeft" align="right" valign="top">ByeTrieIterator&lt; P, T, N &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classbye__trie_1_1ByeTrie.html#adae9bd70f66630d260da55782a460f65">erase</a> (ByeTrieIterator&lt; P, T, N &gt; it) noexcept(false)</td></tr>
-<tr class="separator:adae9bd70f66630d260da55782a460f65"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:acf996e6db82aaf1b09ce4508341ea531" id="r_acf996e6db82aaf1b09ce4508341ea531"><td class="memItemLeft" align="right" valign="top">std::optional&lt; T &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classbye__trie_1_1ByeTrie.html#acf996e6db82aaf1b09ce4508341ea531">erase_exact</a> (Bits&lt; P &gt; prefix) noexcept(noexcept(alloc_.realloc(MemBlk{}, 0)))</td></tr>
+<tr class="memdesc:acf996e6db82aaf1b09ce4508341ea531"><td class="mdescLeft">&#160;</td><td class="mdescRight">Erase exact prefix.  <br /></td></tr>
+<tr class="separator:acf996e6db82aaf1b09ce4508341ea531"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a4ba63a0b0c608561f46f52d29a3efd9f" id="r_a4ba63a0b0c608561f46f52d29a3efd9f"><td class="memItemLeft" align="right" valign="top">ByeTrieSubs&lt; P, T, N &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classbye__trie_1_1ByeTrie.html#a4ba63a0b0c608561f46f52d29a3efd9f">subs</a> (Bits&lt; P &gt; prefix) const noexcept(false)</td></tr>
 <tr class="memdesc:a4ba63a0b0c608561f46f52d29a3efd9f"><td class="mdescLeft">&#160;</td><td class="mdescRight">View to sub networks of <code>prefix</code>  <br /></td></tr>
 <tr class="separator:a4ba63a0b0c608561f46f52d29a3efd9f"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -322,8 +320,8 @@ template&lt;class I  = Iar, std::enable_if_t&lt; std::is_same_v&lt; I, <a class=
 
 </div>
 </div>
-<a id="a214fea35a148229e58c57eeac2872002" name="a214fea35a148229e58c57eeac2872002"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a214fea35a148229e58c57eeac2872002">&#9670;&#160;</a></span>erase() <span class="overload">[1/2]</span></h2>
+<a id="acf996e6db82aaf1b09ce4508341ea531" name="acf996e6db82aaf1b09ce4508341ea531"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#acf996e6db82aaf1b09ce4508341ea531">&#9670;&#160;</a></span>erase_exact()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -334,7 +332,7 @@ template&lt;UnsignedIntegral P, TrivialLittleObject T, Allocator Alloc = SystemA
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt; T &gt; erase </td>
+          <td class="memname">std::optional&lt; T &gt; erase_exact </td>
           <td>(</td>
           <td class="paramtype">Bits&lt; P &gt;&#160;</td>
           <td class="paramname"><em>prefix</em></td><td>)</td>
@@ -348,46 +346,10 @@ template&lt;UnsignedIntegral P, TrivialLittleObject T, Allocator Alloc = SystemA
 </table>
 </div><div class="memdoc">
 
-<p>Erase prefix. </p>
+<p>Erase exact prefix. </p>
 <dl class="exception"><dt>Exceptions</dt><dd>
   <table class="exception">
-    <tr><td class="paramname">Forwards</td><td><code>Alloc::realloc</code> exception. \node Invalidates all iterators. </td></tr>
-  </table>
-  </dd>
-</dl>
-
-</div>
-</div>
-<a id="adae9bd70f66630d260da55782a460f65" name="adae9bd70f66630d260da55782a460f65"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#adae9bd70f66630d260da55782a460f65">&#9670;&#160;</a></span>erase() <span class="overload">[2/2]</span></h2>
-
-<div class="memitem">
-<div class="memproto">
-<div class="memtemplate">
-template&lt;UnsignedIntegral P, TrivialLittleObject T, Allocator Alloc = SystemAllocator, uint8_t N = 5, class Iar  = Iar0&lt;N&gt;&gt; </div>
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">ByeTrieIterator&lt; P, T, N &gt; erase </td>
-          <td>(</td>
-          <td class="paramtype">ByeTrieIterator&lt; P, T, N &gt;&#160;</td>
-          <td class="paramname"><em>it</em></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel">noexcept</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-<dl class="section pre"><dt>Precondition</dt><dd>A valid and not <code>end()</code> iterator. </dd></dl>
-<dl class="section return"><dt>Returns</dt><dd>Iterator to the element after the removed one. </dd></dl>
-<dl class="exception"><dt>Exceptions</dt><dd>
-  <table class="exception">
-    <tr><td class="paramname">std::bad_alloc.</td><td></td></tr>
+    <tr><td class="paramname">Forwards</td><td><code>Alloc::realloc</code> exception </td></tr>
   </table>
   </dd>
 </dl>
