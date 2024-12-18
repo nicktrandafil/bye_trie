@@ -1025,7 +1025,7 @@ public:
             }
 
             // go back to the parent
-            if (!path.empty()) {
+            if (path.size() > height) {
                 node = path.back().node;
                 prefix = path.back().prefix;
                 fixed_bits = path.back().fixed_bits;
@@ -1083,6 +1083,7 @@ public:
     /// End iterator.
     explicit SubsIterator() noexcept
             : node{}
+            , height{0}
             , prefix{}
             , fixed_bits{}
             , value_iter_bits{node_values_end()}
@@ -1098,13 +1099,22 @@ private:
 
     /// \note Will be 'end', if the prefix doesn't exist.
     /// \throw std::bad_alloc
-    explicit SubsIterator(detail::Node<N> node, Bits<P> prefix) noexcept(false)
+    explicit SubsIterator(std::vector<detail::Node<N>> nodes,
+                          Bits<P> prefix,
+                          detail::Node<N> node,
+                          Bits<P> reminder) noexcept(false)
             : node{node}
-            , prefix{prefix.prefix(prefix.len() - prefix.len() % N)}
-            , fixed_bits{prefix.suffix(prefix.len() - prefix.len() % N)}
+            , height{nodes.size()}
+            , prefix{prefix}
+            , fixed_bits{reminder}
             , value_iter_bits{node_values_begin()}
             , child_iter_bits{node_branches_begin()} {
         assert(values_slice().len() < N);
+        for (unsigned i = 0; i < nodes.size(); ++i) {
+            path.emplace_back(
+                    nodes[i], prefix.prefix(i * N), Bits<P>{}, prefix.sub(i * N, N));
+        }
+
         unsigned vec_idx;
         if (!node.empty() && !node.internal_bitmap.exists(vec_idx, values_slice())) {
             ++(*this);
@@ -1143,6 +1153,7 @@ private:
     };
 
     detail::Node<N> node;
+    size_t height;
     Bits<P> prefix;
     Bits<P> fixed_bits;
     Bits<P> value_iter_bits;
@@ -1738,12 +1749,8 @@ public:
                             node->internal_bitmap.total()};
 
         if (vec.size() < 2) [[unlikely]] {
-            auto const subs_root_height =
-                    it.path.empty() ? 0 : it.path.front().prefix.len() / N;
-            if (auto const [height, node] = erase_cleaning(prefix);
-                height > subs_root_height) {
-                it.path.erase(it.path.begin() + (height - subs_root_height),
-                              it.path.end());
+            if (auto const [height, node] = erase_cleaning(prefix); height > it.height) {
+                it.path.erase(it.path.begin() + height, it.path.end());
                 it.path.back().node = node.value();
                 it.value_iter_bits = it.node_values_end(); // current node is disposed
                 ++it;
@@ -1798,12 +1805,18 @@ public:
         auto suffix = prefix;
         detail::Node<N>* node = &roots_.root(suffix);
 
-        detail::find_leaf_branch(node, suffix, noop);
+        std::vector<detail::Node<N>> path;
+        detail::find_leaf_branch(
+                node, suffix, [&path](auto node, auto) { path.push_back(node); });
+
         if (suffix.len() > N - 1) {
             return SubsIterator<P, T, N>{};
         }
 
-        return SubsIterator<P, T, N>{*node, prefix};
+        return SubsIterator<P, T, N>{std::move(path),
+                                     prefix.prefix(prefix.len() - suffix.len()),
+                                     *node,
+                                     suffix};
     }
 
     /// Visit super prefixes of `prefix` with `on_super(Bits, T&)` callback.
