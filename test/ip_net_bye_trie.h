@@ -32,8 +32,6 @@
 
 namespace bye_trie {
 
-using Uint128 = __uint128_t;
-
 namespace detail {
 
 // clang-format off
