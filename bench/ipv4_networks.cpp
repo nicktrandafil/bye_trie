@@ -26,11 +26,12 @@
 
 #include <ip_net_bye_trie.h>
 
-#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <random>
 #include <vector>
+#include <unordered_map>
+#include <boost/container_hash/hash.hpp>
 
 using namespace bye_trie;
 using namespace boost::asio::ip;
@@ -45,6 +46,15 @@ static uint16_t parse_int(std::string_view view) {
     }
     return result;
 }
+
+struct Hash {
+    size_t operator()(network_v4 const& x) const noexcept {
+        size_t seed = 0;
+        boost::hash_combine(seed, x.network().to_uint());
+        boost::hash_combine(seed, x.prefix_length());
+        return seed;
+    }
+};
 
 std::pair<network_v4, uint16_t> parse_network_and_asn(std::string_view line) {
     auto const view = std::string_view{line};
@@ -64,19 +74,33 @@ std::pair<network_v4, uint16_t> parse_network_and_asn(std::string_view line) {
 
 int main() {
     ByeTrieV4<long> trie;
+    std::unordered_map<network_v4, long, Hash> ht;
 
     {
         std::vector<std::pair<network_v4, uint16_t>> networks;
         std::ifstream file("uniq_pfx_asn_dfz.csv");
+        if (!file) {
+            throw std::runtime_error("failed to open uniq_pfx_asn_dfz.csv");
+        }
+
         std::string line;
         while (std::getline(file, line)) {
             networks.push_back(parse_network_and_asn(line));
         }
 
-        std::cout << "average insert time: "
+        std::cout << "trie: average insert time: "
                   << per_network(benchmark([&] {
                                      for (auto const& [network, asn] : networks) {
-                                         trie.insert(network, asn).has_value();
+                                         trie.insert(network, asn);
+                                     }
+                                 }),
+                                 networks.size())
+                  << '\n';
+
+        std::cout << "std::unordered_map: average insert time: "
+                  << per_network(benchmark([&] {
+                                     for (auto const& [network, asn] : networks) {
+                                         ht.emplace(network, asn);
                                      }
                                  }),
                                  networks.size())
@@ -114,7 +138,7 @@ int main() {
             }
         };
 
-        std::cout << "average match_longest time (prefix_len=32): "
+        std::cout << "trie: average match_longest time (prefix_len=32): "
                   << per_network(benchmark([&] {
                                      iter([&trie](auto network) {
                                          do_not_optimize(trie.match_longest(network));
@@ -123,10 +147,19 @@ int main() {
                                  100 * 256 * 256 * third_byte.size())
                   << "\n";
 
-        std::cout << "average match_exact time (prefix_length=32): "
+        std::cout << "trie: average match_exact time (prefix_length=32): "
                   << per_network(benchmark([&] {
                                      iter([&trie](auto network) {
                                          do_not_optimize(trie.match_exact(network));
+                                     });
+                                 }),
+                                 100 * 256 * 256 * third_byte.size())
+                  << "\n";
+
+        std::cout << "std::unordered_map: average match_exact time (prefix_len=32): "
+                  << per_network(benchmark([&] {
+                                     iter([&ht](auto network) {
+                                         do_not_optimize(ht.find(network));
                                      });
                                  }),
                                  100 * 256 * 256 * third_byte.size())
