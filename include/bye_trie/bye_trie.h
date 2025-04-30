@@ -848,7 +848,7 @@ D* as_ptr(S& ptr) noexcept
     requires(sizeof(D) == sizeof(S))
 {
     return
-#if __cplusplus >= 202300L
+#ifdef __cpp_lib_start_lifetime_as
             std::start_lifetime_as<D>(&ptr)
 #elif defined(bye_trie_STRICT_ALIASING)
             new (ptr) T(std::bit_cast<D>(ptr));
@@ -863,7 +863,7 @@ D* as_ptr(S& ptr) noexcept
     requires(sizeof(D) != sizeof(S))
 {
     return
-#if __cplusplus >= 202300L
+#ifdef __cpp_lib_start_lifetime_as
             std::start_lifetime_as<D>(&ptr)
 #else
             reinterpret_cast<D*>(&ptr) // UB! OK if strict aliasing is off
