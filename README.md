@@ -4,7 +4,7 @@
 
 # ByeTrie is bits trie data structure
 
-ByeTrie is a trie data structure where keys are bit strings. It is based on the [Tree Bitmap : Hardware/Software IP Lookups with
+ByeTrie is a compressed binary trie data structure. It is based on the [Tree Bitmap : Hardware/Software IP Lookups with
 Incremental Updates](https://cseweb.ucsd.edu/~varghese/PAPERS/ccr2004.pdf) paper by W. Eatherton, Z. Dittia, G. Varghese.
 
 The goal of this implementation is to be space and time efficient as much as possible.

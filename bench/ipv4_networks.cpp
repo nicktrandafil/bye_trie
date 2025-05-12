@@ -24,14 +24,14 @@
 
 #include "common.h"
 
-#include <ip_net_bye_trie.h>
+#include <boost/container_hash/hash.hpp>
 
+#include <boost_trie.h>
 #include <fstream>
 #include <iostream>
 #include <random>
-#include <vector>
 #include <unordered_map>
-#include <boost/container_hash/hash.hpp>
+#include <vector>
 
 using namespace bye_trie;
 using namespace boost::asio::ip;
@@ -73,7 +73,7 @@ std::pair<network_v4, uint16_t> parse_network_and_asn(std::string_view line) {
 } // namespace
 
 int main() {
-    ByeTrieV4<long> trie;
+    BoostTrieV4<long> trie;
     std::unordered_map<network_v4, long, Hash> ht;
 
     {
